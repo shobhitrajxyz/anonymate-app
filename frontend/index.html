@@ -6,49 +6,50 @@
     <title>AnonyMate</title>
     <style>
         body { background-color: #121212; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        h1 { margin-bottom: 10px; font-size: 3rem; letter-spacing: 2px; }
+        h1 { margin-bottom: 5px; font-size: 3rem; letter-spacing: 2px; }
+        
+        /* New badge to show location */
+        .location-badge { 
+            background: #333; padding: 5px 15px; border-radius: 15px; font-size: 0.9rem; color: #ccc; margin-bottom: 20px; display: none;
+        }
+
         .btn { padding: 15px 40px; font-size: 1.2rem; border-radius: 30px; cursor: pointer; border: none; font-weight: bold; margin-top: 20px; transition: 0.2s; }
         .btn-start { background-color: #00d26a; color: black; }
         .btn-stop { background-color: #ff4b4b; color: white; display: none; }
         .btn:active { transform: scale(0.95); }
-        .status { color: #aaaaaa; margin-top: 10px; font-size: 1.1rem; text-align: center; max-width: 80%; }
-        /* Debug info */
-        #logs { margin-top: 20px; font-size: 0.8rem; color: #555; display: none; }
+        .status { color: #aaaaaa; margin-top: 10px; font-size: 1.1rem; text-align: center; }
     </style>
 </head>
 <body>
     <h1>AnonyMate</h1>
+    
+    <!-- This will show the country -->
+    <div class="location-badge" id="locationBadge">Partner: Unknown</div>
+
     <div class="status" id="status">Click below to find a partner</div>
     
     <button class="btn btn-start" id="startBtn">Find Partner</button>
     <button class="btn btn-stop" id="stopBtn">End Call</button>
     
-    <!-- 'playsinline' is REQUIRED for iPhone -->
     <audio id="remoteAudio" autoplay playsinline></audio>
-    <div id="logs"></div>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        // Your Render Backend URL
+        // --- YOUR RENDER URL GOES HERE ---
         const socket = io("https://anonymate-backend-chyg.onrender.com"); 
         
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
         const statusText = document.getElementById('status');
+        const locationBadge = document.getElementById('locationBadge');
         const remoteAudio = document.getElementById('remoteAudio');
         
-        let localStream;
-        let peerConnection;
-        let roomId;
+        let localStream, peerConnection, roomId;
 
-        // MORE FREE SERVERS = BETTER CHANCE OF CONNECTING
         const config = { 
             iceServers: [
                 { urls: "stun:stun.l.google.com:19302" },
-                { urls: "stun:stun1.l.google.com:19302" },
-                { urls: "stun:stun2.l.google.com:19302" },
-                { urls: "stun:stun3.l.google.com:19302" },
-                { urls: "stun:stun4.l.google.com:19302" }
+                { urls: "stun:stun1.l.google.com:19302" }
             ] 
         };
 
@@ -60,55 +61,37 @@
                     statusText.innerText = "Searching for someone...";
                     startBtn.style.display = 'none';
                     stopBtn.style.display = 'block';
+                    locationBadge.style.display = 'none'; // Hide badge while searching
                     socket.emit('join_queue');
                 })
-                .catch(e => {
-                    alert("Microphone access failed. Check browser settings.");
-                    console.error(e);
-                });
+                .catch(e => alert("Microphone access failed."));
         };
 
         stopBtn.onclick = () => location.reload();
 
-        socket.on("match_found", async ({ roomId: id, initiator }) => {
+        // Updated to receive 'partnerCountry'
+        socket.on("match_found", async ({ roomId: id, initiator, partnerCountry }) => {
             roomId = id;
-            statusText.innerText = "Match found! Connecting to partner...";
             
+            // Show the Country!
+            statusText.innerText = "Match found! Connecting...";
+            locationBadge.innerText = `Partner Location: ${partnerCountry}`;
+            locationBadge.style.display = 'block';
+
             peerConnection = new RTCPeerConnection(config);
-            
-            // Add our audio to the connection
             localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
             
-            // When we receive their audio
             peerConnection.ontrack = (e) => {
-                console.log("Audio Stream Received");
                 remoteAudio.srcObject = e.streams[0];
-                
-                // FORCE PLAY (Fix for some browsers)
-                remoteAudio.play().catch(error => {
-                    console.log("Auto-play prevented. User interaction needed.");
+                remoteAudio.play().catch(() => {
                     statusText.innerText = "Tap screen to hear audio!";
-                    document.body.onclick = () => {
-                        remoteAudio.play();
-                        statusText.innerText = "Connected! Speak now.";
-                    };
+                    document.body.onclick = () => remoteAudio.play();
                 });
-                
                 statusText.innerText = "Connected! Speak now.";
             };
 
             peerConnection.onicecandidate = (e) => {
-                if (e.candidate) {
-                    socket.emit("signal", { roomId, signalData: { type: "candidate", candidate: e.candidate } });
-                }
-            };
-            
-            // Log connection state changes for debugging
-            peerConnection.onconnectionstatechange = () => {
-                console.log("Connection State:", peerConnection.connectionState);
-                if(peerConnection.connectionState === 'failed') {
-                    statusText.innerText = "Connection failed. Firewall blocked it.";
-                }
+                if (e.candidate) socket.emit("signal", { roomId, signalData: { type: "candidate", candidate: e.candidate } });
             };
 
             if (initiator) {
@@ -131,9 +114,7 @@
                 } else if (data.type === "candidate") {
                     await peerConnection.addIceCandidate(data.candidate);
                 }
-            } catch (err) {
-                console.error("Signal Error:", err);
-            }
+            } catch (err) { console.error(err); }
         });
     </script>
 </body>
