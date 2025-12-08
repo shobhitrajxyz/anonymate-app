@@ -52,26 +52,35 @@
 
         // --- THE FIX: FREE TURN SERVERS (OpenRelay) ---
         const config = { 
-            iceServers: [
-                { urls: "stun:stun.l.google.com:19302" },
-                // OpenRelay Free Tier (Helps connect different countries)
-                { 
-                    urls: "turn:openrelay.metered.ca:80",
-                    username: "openrelayproject",
-                    credential: "openrelayproject"
-                },
-                { 
-                    urls: "turn:openrelay.metered.ca:443",
-                    username: "openrelayproject",
-                    credential: "openrelayproject"
-                },
-                { 
-                    urls: "turn:openrelay.metered.ca:443?transport=tcp",
-                    username: "openrelayproject",
-                    credential: "openrelayproject"
-                }
-            ] 
-        };
+    iceServers: [
+        { 
+            // 1. Google STUN (Backup)
+            urls: "stun:stun.l.google.com:19302" 
+        },
+        { 
+            // 2. YOUR PRIVATE TURN SERVER (The Main Fix)
+            urls: "turn:global.turn.metered.ca:80?transport=udp",
+            
+            // Paste the long Username from your screenshot here:
+            username: "4c004e71f89e70a872bae606", 
+            
+            // Paste the long Password from your screenshot here:
+            credential: "as7cdl2hhzUQh+87"
+        },
+        { 
+            // 3. Backup TCP Connection
+            urls: "turn:global.turn.metered.ca:80?transport=tcp",
+            username: "4c004e71f89e70a872bae606", 
+            credential: "as7cdl2hhzUQh+87"
+        },
+        { 
+            // 4. Secure Connection
+            urls: "turn:global.turn.metered.ca:443?transport=tcp",
+            username: "4c004e71f89e70a872bae606", 
+            credential: "as7cdl2hhzUQh+87"
+        }
+    ] 
+};
 
         startBtn.onclick = () => {
             statusText.innerText = "Requesting Microphone...";
