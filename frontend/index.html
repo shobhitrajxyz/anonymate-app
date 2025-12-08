@@ -7,71 +7,52 @@
     <style>
         body { background-color: #121212; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
         h1 { margin-bottom: 5px; font-size: 3rem; letter-spacing: 2px; }
-        
-        .location-badge { 
-            background: #333; padding: 5px 15px; border-radius: 15px; font-size: 0.9rem; color: #ccc; margin-bottom: 20px; display: none;
-        }
-
+        .location-badge { background: #333; padding: 5px 15px; border-radius: 15px; font-size: 0.9rem; color: #ccc; margin-bottom: 20px; display: none; }
         .btn { padding: 15px 40px; font-size: 1.2rem; border-radius: 30px; cursor: pointer; border: none; font-weight: bold; margin-top: 20px; transition: 0.2s; }
         .btn-start { background-color: #00d26a; color: black; }
         .btn-stop { background-color: #ff4b4b; color: white; display: none; }
-        
-        /* New 'Fix Audio' button */
-        .btn-fix { background-color: #ffa500; color: black; margin-top: 10px; font-size: 1rem; padding: 10px 20px; display: none; }
-        
         .status { color: #aaaaaa; margin-top: 10px; font-size: 1.1rem; text-align: center; }
     </style>
 </head>
 <body>
     <h1>AnonyMate</h1>
-    
     <div class="location-badge" id="locationBadge">Partner: Unknown</div>
     <div class="status" id="status">Click below to find a partner</div>
-    
     <button class="btn btn-start" id="startBtn">Find Partner</button>
     <button class="btn btn-stop" id="stopBtn">End Call</button>
-    
-    <!-- Button to force audio if it's silent -->
-    <button class="btn btn-fix" id="fixAudioBtn">🔊 Tap here if no sound</button>
-    
     <audio id="remoteAudio" autoplay playsinline></audio>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        // --- YOUR RENDER URL ---
         const socket = io("https://anonymate-backend-chyg.onrender.com"); 
         
+        // --- ⬇️ PASTE YOUR METERED KEYS HERE ⬇️ ---
+        const turnUsername = "4c004e71f89e70a872bae606"; 
+        const turnPassword = "as7cdI2hhzUQh+87";
+        // -------------------------------------------
+
+        const config = { 
+            iceServers: [
+                { urls: "stun:stun.l.google.com:19302" }, // Always keep Google STUN
+                { 
+                    urls: "turn:global.turn.metered.ca:443?transport=tcp",
+                    username: turnUsername, credential: turnPassword
+                },
+                { 
+                    urls: "turn:global.turn.metered.ca:80?transport=udp",
+                    username: turnUsername, credential: turnPassword
+                }
+            ] 
+        };
+
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
-        const fixAudioBtn = document.getElementById('fixAudioBtn');
         const statusText = document.getElementById('status');
         const locationBadge = document.getElementById('locationBadge');
         const remoteAudio = document.getElementById('remoteAudio');
         
         let localStream, peerConnection, roomId;
-
-        // --- THE FIX: FREE TURN SERVERS (OpenRelay) ---
-        const config = { 
-    iceServers: [
-        { 
-            // 1. Try VPN-Friendly Port first (TCP 443)
-            urls: "turn:global.turn.metered.ca:443?transport=tcp",
-            username: "4c004e71f89e70a872bae606", 
-            credential: "as7cdI2hhzUQh+87"
-        },
-        { 
-            // 2. Try Standard TURN (UDP)
-            urls: "turn:global.turn.metered.ca:80?transport=udp",
-            username: "4c004e71f89e70a872bae606", 
-            credential: "as7cdI2hhzUQh+87"
-        },
-        { 
-            // 3. Fallback to Google (Crucial for local connections)
-            urls: "stun:stun.l.google.com:19302" 
-        }
-    ]
-    // I REMOVED THE "RELAY" POLICY LINE.
-};
+        let candidateQueue = []; // Fix for the "Timing Bug"
 
         startBtn.onclick = () => {
             statusText.innerText = "Requesting Microphone...";
@@ -82,59 +63,40 @@
                     startBtn.style.display = 'none';
                     stopBtn.style.display = 'block';
                     locationBadge.style.display = 'none';
-                    fixAudioBtn.style.display = 'none';
                     socket.emit('join_queue');
                 })
                 .catch(e => alert("Microphone access failed."));
         };
 
         stopBtn.onclick = () => location.reload();
-        
-        // Manual Audio Fix Button
-        fixAudioBtn.onclick = () => {
-            if(remoteAudio.srcObject){
-                remoteAudio.play();
-                statusText.innerText = "Audio forced. Can you hear now?";
-                fixAudioBtn.style.display = 'none';
-            }
-        };
 
         socket.on("match_found", async ({ roomId: id, initiator, partnerCountry }) => {
             roomId = id;
-            statusText.innerText = "Match found! establishing connection...";
+            statusText.innerText = "Match found! Connecting...";
             locationBadge.innerText = `Partner Location: ${partnerCountry}`;
             locationBadge.style.display = 'block';
 
             peerConnection = new RTCPeerConnection(config);
+            
+            // Add local audio
             localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
             
+            // Handle incoming audio
             peerConnection.ontrack = (e) => {
-                console.log("Audio Stream Received");
                 remoteAudio.srcObject = e.streams[0];
-                
-                // Try to play automatically
-                const playPromise = remoteAudio.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch(error => {
-                        console.log("Auto-play blocked. showing button.");
-                        statusText.innerText = "Tap the orange button to hear audio!";
-                        fixAudioBtn.style.display = 'block';
-                    });
-                }
+                remoteAudio.play().catch(e => console.log("Autoplay blocked"));
                 statusText.innerText = "Connected! Speak now.";
             };
 
+            // Send candidates to partner
             peerConnection.onicecandidate = (e) => {
                 if (e.candidate) socket.emit("signal", { roomId, signalData: { type: "candidate", candidate: e.candidate } });
             };
-            
-            // Debugging Connection State
+
             peerConnection.onconnectionstatechange = () => {
-                console.log("State:", peerConnection.connectionState);
-                if(peerConnection.connectionState === 'connected') {
-                    statusText.innerText = "Connected! Speak now.";
-                } else if (peerConnection.connectionState === 'failed') {
-                    statusText.innerText = "Connection failed (Firewall blocked).";
+                if (peerConnection.connectionState === 'failed') {
+                    // Don't give up immediately, sometimes it retries
+                    console.log("Connection unstable, retrying...");
                 }
             };
 
@@ -147,19 +109,35 @@
 
         socket.on("signal", async (data) => {
             if (!peerConnection) return;
-            try {
-                if (data.type === "offer") {
-                    await peerConnection.setRemoteDescription(data.offer);
-                    const answer = await peerConnection.createAnswer();
-                    await peerConnection.setLocalDescription(answer);
-                    socket.emit("signal", { roomId, signalData: { type: "answer", answer } });
-                } else if (data.type === "answer") {
-                    await peerConnection.setRemoteDescription(data.answer);
-                } else if (data.type === "candidate") {
-                    await peerConnection.addIceCandidate(data.candidate);
+            
+            if (data.type === "offer") {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                socket.emit("signal", { roomId, signalData: { type: "answer", answer } });
+                processQueue(); // Process any waiting candidates
+            } 
+            else if (data.type === "answer") {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                processQueue(); // Process any waiting candidates
+            } 
+            else if (data.type === "candidate") {
+                // BUG FIX: If we aren't ready, save candidate for later
+                if (peerConnection.remoteDescription) {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                } else {
+                    candidateQueue.push(data.candidate);
                 }
-            } catch (err) { console.error(err); }
+            }
         });
+
+        // Helper to process waiting candidates
+        async function processQueue() {
+            while (candidateQueue.length > 0) {
+                const candidate = candidateQueue.shift();
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            }
+        }
     </script>
 </body>
 </html>
