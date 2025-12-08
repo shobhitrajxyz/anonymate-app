@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AnonyMate</title>
+    <style>
+        body { background-color: #121212; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        h1 { margin-bottom: 10px; font-size: 3rem; letter-spacing: 2px; }
+        .btn { padding: 15px 40px; font-size: 1.2rem; border-radius: 30px; cursor: pointer; border: none; font-weight: bold; margin-top: 20px;}
+        .btn-start { background-color: #00d26a; color: black; }
+        .btn-stop { background-color: #ff4b4b; color: white; display: none; }
+        .status { color: #aaaaaa; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>AnonyMate</h1>
+    <div class="status" id="status">Click below to find a partner</div>
+    
+    <button class="btn btn-start" id="startBtn">Find Partner</button>
+    <button class="btn btn-stop" id="stopBtn">End Call</button>
+    
+    <audio id="remoteAudio" autoplay></audio>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        const socket = io("http://localhost:3001"); 
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusText = document.getElementById('status');
+        const remoteAudio = document.getElementById('remoteAudio');
+        
+        let localStream, peerConnection, roomId;
+        const config = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+        startBtn.onclick = () => {
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                localStream = stream;
+                statusText.innerText = "Searching for someone...";
+                startBtn.style.display = 'none';
+                stopBtn.style.display = 'block';
+                socket.emit('join_queue');
+            }).catch(e => alert("Please allow microphone access!"));
+        };
+
+        stopBtn.onclick = () => location.reload();
+
+        socket.on("match_found", async ({ roomId: id, initiator }) => {
+            roomId = id;
+            statusText.innerText = "Match found! Connecting...";
+            peerConnection = new RTCPeerConnection(config);
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+            
+            peerConnection.ontrack = (e) => {
+                remoteAudio.srcObject = e.streams[0];
+                statusText.innerText = "Connected! Speak now.";
+            };
+
+            peerConnection.onicecandidate = (e) => {
+                if (e.candidate) socket.emit("signal", { roomId, signalData: { type: "candidate", candidate: e.candidate } });
+            };
+
+            if (initiator) {
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                socket.emit("signal", { roomId, signalData: { type: "offer", offer } });
+            }
+        });
+
+        socket.on("signal", async (data) => {
+            if (!peerConnection) return;
+            if (data.type === "offer") {
+                await peerConnection.setRemoteDescription(data.offer);
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                socket.emit("signal", { roomId, signalData: { type: "answer", answer } });
+            } else if (data.type === "answer") {
+                await peerConnection.setRemoteDescription(data.answer);
+            } else if (data.type === "candidate") {
+                await peerConnection.addIceCandidate(data.candidate);
+            }
+        });
+    </script>
+</body>
+</html>
