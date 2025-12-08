@@ -9,16 +9,39 @@ app.use(cors());
 const server = http.createServer(app);
 
 const io = new Server(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
+    cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
 let waitingQueue = []; 
 
-io.on("connection", (socket) => {
-    console.log(`User connected: ${socket.id}`);
+// Helper function to get Country from IP
+async function getCountry(ip) {
+    try {
+        // If running locally, IP might be "::1", so we default to "Localhost"
+        if (ip === "::1" || ip === "127.0.0.1") return "Local Dev";
+        
+        // Free API to look up country
+        const response = await fetch(`http://ip-api.com/json/${ip}`);
+        const data = await response.json();
+        return data.country || "Unknown";
+    } catch (error) {
+        return "Unknown";
+    }
+}
+
+io.on("connection", async (socket) => {
+    // 1. Get User's IP
+    let clientIp = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
+    // On Render, IP might look like "1.2.3.4, 10.0.0.1". We want the first one.
+    if (clientIp && clientIp.includes(',')) {
+        clientIp = clientIp.split(',')[0].trim();
+    }
+
+    // 2. Find their Country
+    const country = await getCountry(clientIp);
+    socket.userData = { country: country };
+    
+    console.log(`User connected from: ${country} (${socket.id})`);
 
     socket.on("join_queue", () => {
         if (waitingQueue.length > 0) {
@@ -28,13 +51,22 @@ io.on("connection", (socket) => {
             socket.join(roomId);
             partnerSocket.join(roomId);
 
-            io.to(socket.id).emit("match_found", { roomId, initiator: true });
-            io.to(partnerSocket.id).emit("match_found", { roomId, initiator: false });
+            // 3. Send the PARTNER'S country to the user
+            io.to(socket.id).emit("match_found", { 
+                roomId, 
+                initiator: true, 
+                partnerCountry: partnerSocket.userData.country 
+            });
+            
+            io.to(partnerSocket.id).emit("match_found", { 
+                roomId, 
+                initiator: false, 
+                partnerCountry: socket.userData.country 
+            });
 
-            console.log(`Matched ${socket.id} with ${partnerSocket.id}`);
+            console.log(`Matched: ${socket.userData.country} <-> ${partnerSocket.userData.country}`);
         } else {
             waitingQueue.push(socket);
-            console.log(`User ${socket.id} added to queue.`);
         }
     });
 
