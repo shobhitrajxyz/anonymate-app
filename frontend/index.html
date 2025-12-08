@@ -8,7 +8,6 @@
         body { background-color: #121212; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
         h1 { margin-bottom: 5px; font-size: 3rem; letter-spacing: 2px; }
         
-        /* New badge to show location */
         .location-badge { 
             background: #333; padding: 5px 15px; border-radius: 15px; font-size: 0.9rem; color: #ccc; margin-bottom: 20px; display: none;
         }
@@ -16,40 +15,61 @@
         .btn { padding: 15px 40px; font-size: 1.2rem; border-radius: 30px; cursor: pointer; border: none; font-weight: bold; margin-top: 20px; transition: 0.2s; }
         .btn-start { background-color: #00d26a; color: black; }
         .btn-stop { background-color: #ff4b4b; color: white; display: none; }
-        .btn:active { transform: scale(0.95); }
+        
+        /* New 'Fix Audio' button */
+        .btn-fix { background-color: #ffa500; color: black; margin-top: 10px; font-size: 1rem; padding: 10px 20px; display: none; }
+        
         .status { color: #aaaaaa; margin-top: 10px; font-size: 1.1rem; text-align: center; }
     </style>
 </head>
 <body>
     <h1>AnonyMate</h1>
     
-    <!-- This will show the country -->
     <div class="location-badge" id="locationBadge">Partner: Unknown</div>
-
     <div class="status" id="status">Click below to find a partner</div>
     
     <button class="btn btn-start" id="startBtn">Find Partner</button>
     <button class="btn btn-stop" id="stopBtn">End Call</button>
     
+    <!-- Button to force audio if it's silent -->
+    <button class="btn btn-fix" id="fixAudioBtn">🔊 Tap here if no sound</button>
+    
     <audio id="remoteAudio" autoplay playsinline></audio>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        // --- YOUR RENDER URL GOES HERE ---
+        // --- YOUR RENDER URL ---
         const socket = io("https://anonymate-backend-chyg.onrender.com"); 
         
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
+        const fixAudioBtn = document.getElementById('fixAudioBtn');
         const statusText = document.getElementById('status');
         const locationBadge = document.getElementById('locationBadge');
         const remoteAudio = document.getElementById('remoteAudio');
         
         let localStream, peerConnection, roomId;
 
+        // --- THE FIX: FREE TURN SERVERS (OpenRelay) ---
         const config = { 
             iceServers: [
                 { urls: "stun:stun.l.google.com:19302" },
-                { urls: "stun:stun1.l.google.com:19302" }
+                // OpenRelay Free Tier (Helps connect different countries)
+                { 
+                    urls: "turn:openrelay.metered.ca:80",
+                    username: "openrelayproject",
+                    credential: "openrelayproject"
+                },
+                { 
+                    urls: "turn:openrelay.metered.ca:443",
+                    username: "openrelayproject",
+                    credential: "openrelayproject"
+                },
+                { 
+                    urls: "turn:openrelay.metered.ca:443?transport=tcp",
+                    username: "openrelayproject",
+                    credential: "openrelayproject"
+                }
             ] 
         };
 
@@ -61,20 +81,27 @@
                     statusText.innerText = "Searching for someone...";
                     startBtn.style.display = 'none';
                     stopBtn.style.display = 'block';
-                    locationBadge.style.display = 'none'; // Hide badge while searching
+                    locationBadge.style.display = 'none';
+                    fixAudioBtn.style.display = 'none';
                     socket.emit('join_queue');
                 })
                 .catch(e => alert("Microphone access failed."));
         };
 
         stopBtn.onclick = () => location.reload();
+        
+        // Manual Audio Fix Button
+        fixAudioBtn.onclick = () => {
+            if(remoteAudio.srcObject){
+                remoteAudio.play();
+                statusText.innerText = "Audio forced. Can you hear now?";
+                fixAudioBtn.style.display = 'none';
+            }
+        };
 
-        // Updated to receive 'partnerCountry'
         socket.on("match_found", async ({ roomId: id, initiator, partnerCountry }) => {
             roomId = id;
-            
-            // Show the Country!
-            statusText.innerText = "Match found! Connecting...";
+            statusText.innerText = "Match found! establishing connection...";
             locationBadge.innerText = `Partner Location: ${partnerCountry}`;
             locationBadge.style.display = 'block';
 
@@ -82,16 +109,33 @@
             localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
             
             peerConnection.ontrack = (e) => {
+                console.log("Audio Stream Received");
                 remoteAudio.srcObject = e.streams[0];
-                remoteAudio.play().catch(() => {
-                    statusText.innerText = "Tap screen to hear audio!";
-                    document.body.onclick = () => remoteAudio.play();
-                });
+                
+                // Try to play automatically
+                const playPromise = remoteAudio.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.log("Auto-play blocked. showing button.");
+                        statusText.innerText = "Tap the orange button to hear audio!";
+                        fixAudioBtn.style.display = 'block';
+                    });
+                }
                 statusText.innerText = "Connected! Speak now.";
             };
 
             peerConnection.onicecandidate = (e) => {
                 if (e.candidate) socket.emit("signal", { roomId, signalData: { type: "candidate", candidate: e.candidate } });
+            };
+            
+            // Debugging Connection State
+            peerConnection.onconnectionstatechange = () => {
+                console.log("State:", peerConnection.connectionState);
+                if(peerConnection.connectionState === 'connected') {
+                    statusText.innerText = "Connected! Speak now.";
+                } else if (peerConnection.connectionState === 'failed') {
+                    statusText.innerText = "Connection failed (Firewall blocked).";
+                }
             };
 
             if (initiator) {
