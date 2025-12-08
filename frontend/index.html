@@ -54,26 +54,23 @@
         const config = { 
     iceServers: [
         { 
-            // 1. PRIORITY: TCP 443 (The "VPN Bypass")
-            // This looks like regular HTTPS traffic to the VPN/Firewall.
+            // 1. Try VPN-Friendly Port first (TCP 443)
             urls: "turn:global.turn.metered.ca:443?transport=tcp",
-            username: "4c004e71f89e70a872bae606", 
-            credential: "as7cdI2hhzUQh+87"
+            username: "PASTE_YOUR_USERNAME_HERE", 
+            credential: "PASTE_YOUR_PASSWORD_HERE"
         },
         { 
-            // 2. Backup: UDP (Faster, if VPN allows it)
+            // 2. Try Standard TURN (UDP)
             urls: "turn:global.turn.metered.ca:80?transport=udp",
-            username: "4c004e71f89e70a872bae606", 
-            credential: "as7cdI2hhzUQh+87"
+            username: "PASTE_YOUR_USERNAME_HERE", 
+            credential: "PASTE_PASSWORD_HERE"
         },
         { 
-            // 3. Google STUN (Last Resort)
+            // 3. Fallback to Google (Crucial for local connections)
             urls: "stun:stun.l.google.com:19302" 
         }
-    ],
-    // Force the browser to look for relay candidates (Crucial for VPNs)
-    iceTransportPolicy: "relay", 
-    bundlePolicy: "max-bundle"
+    ]
+    // I REMOVED THE "RELAY" POLICY LINE.
 };
 
         startBtn.onclick = () => {
