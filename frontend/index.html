@@ -23,14 +23,6 @@
 </head>
 <body>
     <div class="logo-container"><img src="https://i.postimg.cc/TKkvv3HF/Anony-Mate-Logo.png" alt="Mic" class="logo-img"></div>
-
-
-    <div class="live-badge">
-        <div class="live-dot"></div>
-        <span id="userCount">0 Online</span>
-    </div>
-
-
     <h1>AnonyMate</h1>
     <div class="location-badge" id="locationBadge">Partner: Unknown</div>
     <button class="btn-start" id="startBtn">Find an AnonyMate</button>
@@ -42,21 +34,11 @@
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        const socket = io("https://anonymate-backend-chyg.onrender.com");
-        
-        
-        const userCountText = document.getElementById('userCount');
-
-        // Listen for the 'user_count' shout from the server
-        socket.on("user_count", (count) => {
-            userCountText.innerText = count + " Online";
-        });
-
-
+        const socket = io("https://anonymate-backend-chyg.onrender.com"); 
         
         // ⬇️⬇️ PASTE METERED KEYS HERE ⬇️⬇️
-        const turnUsername = "4c004e71f89e70a872bae606"; 
-        const turnPassword = "as7cdI2hhzUQh+87";
+        const turnUsername = "PASTE_USERNAME_HERE"; 
+        const turnPassword = "PASTE_PASSWORD_HERE";
         // ⬆️⬆️ ----------------------- ⬆️⬆️
 
         // --- 🛑 STRICT TCP CONFIGURATION (The Fix) ---
