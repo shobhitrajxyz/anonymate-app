@@ -177,7 +177,9 @@
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
 
-
+        const socket = io("https://anonymate-backend-chyg.onrender.com");
+        
+        
         const userCountText = document.getElementById('userCount');
 
         // Listen for the 'user_count' shout from the server
@@ -186,8 +188,6 @@
         });
 
 
-
-        const socket = io("https://anonymate-backend-chyg.onrender.com"); 
         
         // ⬇️⬇️ PASTE YOUR METERED KEYS HERE AGAIN ⬇️⬇️
         const turnUsername = "4c004e71f89e70a872bae606"; 

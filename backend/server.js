@@ -40,7 +40,9 @@ function broadcastUserCount() {
     const count = io.engine.clientsCount;
     
     // "io.emit" sends a message to EVERYONE connected (Global Broadcast)
-    io.emit("user_count", count); 
+    io.emit("user_count", count);
+
+    console.log(`User Count Updated: ${count}`);
 }
 
 
