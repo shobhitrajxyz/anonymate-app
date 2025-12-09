@@ -2,16 +2,18 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>AnonyMate - TURN-only demo</title>
+  <title>AnonyMate — TURN-only client</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body { font-family: Arial, Helvetica, sans-serif; padding: 18px; color:#111; }
-    button{ padding:10px 14px; margin-left:8px; }
-    #log { white-space: pre-wrap; background:#f7f7f7; padding:12px; height:320px; overflow:auto; border:1px solid #ddd; }
+    body { font-family: Arial, Helvetica, sans-serif; padding:18px; color:#111; }
+    button { padding:10px 14px; margin-left:8px; }
+    #log { white-space: pre-wrap; background:#f7f7f7; padding:12px; height:360px; overflow:auto; border:1px solid #ddd; }
+    input { padding:6px 8px; }
+    h2 { margin-top:0; }
   </style>
 </head>
 <body>
-  <h2>AnonyMate — TURN-only WebRTC demo</h2>
+  <h2>AnonyMate — TURN-only client (force relay)</h2>
 
   <div>
     <label>Signaling URL:
@@ -28,11 +30,18 @@
 
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script>
-    // minimal logging
+    // Minimal helpful logging helper
     const logEl = document.getElementById('log');
-    function log(...args){ console.log(...args); logEl.innerText += args.join(' ') + '\n'; logEl.scrollTop = logEl.scrollHeight; }
+    function log(...args){
+      console.log(...args);
+      logEl.innerText += args.join(' ') + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+    }
 
-    // TURN-only ICE servers (openrelay.metered.ca) - RELAY ONLY
+    // Global unhandled rejection logging
+    window.addEventListener('unhandledrejection', e => log('UnhandledPromiseRejection:', e.reason));
+
+    // TURN-only (openrelay.metered.ca) credentials — REPLACE if you have your own TURN
     const DEFAULT_ICE = [
       {
         urls: [
@@ -58,9 +67,7 @@
     let currentRoom = null;
     let isInitiator = false;
 
-    // global unhandled rejection log
-    window.addEventListener('unhandledrejection', e => log('UnhandledPromiseRejection:', e.reason));
-
+    // Connect / disconnect signaling
     connectBtn.onclick = () => {
       if (socket && socket.connected) {
         socket.close();
@@ -91,7 +98,7 @@
         log('[SIG] connect_error', err && err.message ? err.message : err);
       });
 
-      socket.on("user_count", (c)=> log('[SIG] user_count', c));
+      socket.on("user_count", (c) => log('[SIG] user_count', c));
 
       socket.on("match_found", async (payload) => {
         try { log('[SIG] match_found RECEIVED (full):', JSON.stringify(payload)); } catch(e){ log('[SIG] match_found', payload); }
@@ -102,6 +109,7 @@
       });
 
       socket.on("signal", async (data) => {
+        // data: { from, payload }
         log('[SIG] signal RECEIVED (raw):', JSON.stringify(data));
         if (!pc) { log('[WEBRTC] no RTCPeerConnection yet'); return; }
         const d = data.payload;
@@ -117,13 +125,14 @@
             log('[WEBRTC] sent answer');
           }
         } else if (d.candidate) {
-          log('[WEBRTC] remote ICE candidate received:', d.candidate.type);
+          log('[WEBRTC] remote ICE candidate received:', d.candidate && d.candidate.type);
           try { await pc.addIceCandidate(d); log('[WEBRTC] addIceCandidate OK'); }
           catch (e) { log('[WEBRTC] addIceCandidate ERROR', e); }
         }
       });
     };
 
+    // Request to join matchmaking queue
     joinBtn.onclick = () => {
       if (!socket || !socket.connected) return alert("Not connected to signaling");
       socket.emit("join_queue");
@@ -131,14 +140,18 @@
       statusEl.innerText = "Status: waiting for match...";
     };
 
+    // Create peer connection and force relay-only usage
     async function startWebRTCFlow(initiator) {
       if (pc) { try { pc.close(); } catch(e){} pc = null; }
 
-      // Force RELAY-only usage? (optional) => set iceTransportPolicy: "relay"
-      pc = new RTCPeerConnection({ iceServers: DEFAULT_ICE, iceTransportPolicy: "all" });
+      // FORCE relay-only here:
+      pc = new RTCPeerConnection({
+        iceServers: DEFAULT_ICE,
+        iceTransportPolicy: "relay" // <<-- forces TURN-only candidates
+      });
 
       pc.onicecandidate = (e) => {
-        log('[WEBRTC] local icecandidate:', e.candidate ? e.candidate.type + ' | ' + (e.candidate.candidate || '') : 'null');
+        log('[WEBRTC] local icecandidate:', e.candidate ? (e.candidate.type + ' | ' + (e.candidate.candidate || '')) : 'null');
         if (e.candidate) {
           socket.emit("signal", { roomId: currentRoom, signalData: e.candidate });
           log('[SIG] sent local ICE candidate -> signaling');
