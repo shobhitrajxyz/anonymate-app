@@ -1,213 +1,120 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>WebRTC Pair Demo</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AnonyMate</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.18.2.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        :root { --primary: #8A2BE2; --bg-gradient: radial-gradient(circle at center, #240046 0%, #10002b 100%); --text-color: #ffffff; }
+        body { background: var(--bg-gradient); color: var(--text-color); font-family: 'Inter', sans-serif; margin: 0; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        .logo-container { width: 120px; height: 120px; border-radius: 50%; border: 2px solid rgba(138, 43, 226, 0.5); display: flex; align-items: center; justify-content: center; margin-bottom: 20px; box-shadow: 0 0 30px rgba(138, 43, 226, 0.2); background: rgba(255, 255, 255, 0.05); }
+        .logo-img { width: 60px; height: auto; filter: drop-shadow(0 0 10px rgba(138, 43, 226, 0.6)); }
+        h1 { font-size: 2rem; font-weight: 700; margin: 0 0 5px 0; color: #d0a3ff; letter-spacing: 1px; }
+        .location-badge { background: rgba(255, 255, 255, 0.1); padding: 6px 16px; border-radius: 20px; font-size: 0.85rem; color: #ccc; margin-bottom: 40px; display: none; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .btn-start { background: linear-gradient(135deg, #8A2BE2 0%, #4B0082 100%); color: white; padding: 16px 50px; font-size: 1.1rem; font-weight: 600; border: none; border-radius: 12px; cursor: pointer; box-shadow: 0 10px 25px rgba(75, 0, 130, 0.4); transition: transform 0.2s ease, box-shadow 0.2s ease; min-width: 200px; }
+        .btn-stop { background: rgba(255, 75, 75, 0.2); border: 1px solid #ff4b4b; color: #ff4b4b; padding: 14px 40px; font-size: 1rem; border-radius: 12px; cursor: pointer; display: none; margin-top: 20px; font-weight: 600; }
+        .status { color: rgba(255, 255, 255, 0.5); margin-top: 20px; font-size: 0.9rem; }
+    </style>
 </head>
 <body>
-  <h3>Simple WebRTC Pair Demo</h3>
-  <div>
-    <label>Signaling URL:
-      <input id="sigUrl" style="width:420px"
-        value="https://anonymate-backend-chyg.onrender.com" />
-    </label>
-    <button id="connectBtn">Connect</button>
-    <button id="joinBtn" disabled>Join Queue (Match)</button>
-  </div>
+    <div class="logo-container"><img src="https://i.postimg.cc/TKkvv3HF/Anony-Mate-Logo.png" alt="Mic" class="logo-img"></div>
+    <h1>AnonyMate</h1>
+    <div class="location-badge" id="locationBadge">Partner: Unknown</div>
+    <button class="btn-start" id="startBtn">Find an AnonyMate</button>
+    <button class="btn-stop" id="stopBtn">End Call</button>
+    <div class="status" id="status">Ready to connect</div>
 
-  <div>
-    <p id="status">Status: idle</p>
-    <pre id="log" style="white-space:pre-wrap"></pre>
-  </div>
+    <script>
+        // --- 1. CONFIGURATION ---
+        // COPY YOUR APP ID FROM AGORA DASHBOARD
+        const APP_ID = "50b569531b1141868416078af3042e07"; 
+        
+        // YOUR RENDER BACKEND
+        const socket = io("https://anonymate-backend-chyg.onrender.com");
+        
+        // --- 2. AGORA SETUP (The Pro Engine) ---
+        const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+        let localAudioTrack;
+        let currentRoomId = null;
 
-  <audio id="remoteAudio" autoplay playsinline></audio>
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusText = document.getElementById('status');
+        const locationBadge = document.getElementById('locationBadge');
 
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script>
-  // GLOBAL ERROR LOGGING
-  window.addEventListener('unhandledrejection', e =>
-    console.error("Unhandled Promise Rejection:", e.reason)
-  );
+        // --- 3. MAIN LOGIC ---
+        startBtn.onclick = async () => {
+            startBtn.innerText = "Accessing Mic...";
+            
+            try {
+                // Initialize Mic immediately
+                localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                
+                statusText.innerText = "Searching for someone...";
+                startBtn.style.display = 'none';
+                stopBtn.style.display = 'block'; 
+                locationBadge.style.display = 'none';
+                
+                // Ask Server for a Match
+                socket.emit('join_queue');
+                
+            } catch (error) {
+                console.error(error);
+                alert("Microphone Error: " + error.message);
+                startBtn.innerText = "Find an AnonyMate";
+            }
+        };
 
-  // === TURN/STUN CONFIG (FULL + WORKING) ===
-  const DEFAULT_ICE = [
-    { urls: "stun:stun.l.google.com:19302" },
+        stopBtn.onclick = async () => {
+            await leaveCall();
+            location.reload();
+        };
 
-    // IMPORTANT: these turn servers REQUIRE username + credential.
-    {
-      urls: [
-        "turn:openrelay.metered.ca:80",
-        "turn:openrelay.metered.ca:443?transport=tcp",
-        "turns:openrelay.metered.ca:443?transport=tcp"
-      ],
-      username: "openrelayproject",
-      credential: "openrelayproject"
-    }
-  ];
-
-  // UI ELEMENTS
-  const connectBtn = document.getElementById('connectBtn');
-  const joinBtn = document.getElementById('joinBtn');
-  const sigUrlInput = document.getElementById('sigUrl');
-  const statusEl = document.getElementById('status');
-  const logEl = document.getElementById('log');
-  const remoteAudio = document.getElementById('remoteAudio');
-
-  function log(...args) {
-    console.log(...args);
-    logEl.innerText += args.join(" ") + "\n";
-  }
-
-  let socket = null;
-  let pc = null;
-  let localStream = null;
-  let currentRoom = null;
-  let isInitiator = false;
-
-  // CONNECT TO SIGNALING SERVER
-  connectBtn.onclick = async () => {
-    if (socket && socket.connected) {
-      socket.close();
-      connectBtn.innerText = "Connect";
-      joinBtn.disabled = true;
-      statusEl.innerText = "Status: disconnected";
-      return;
-    }
-
-    const SIGNALING_URL = sigUrlInput.value.trim();
-    log("[UI] connecting to", SIGNALING_URL);
-
-    socket = io(SIGNALING_URL, { transports: ["websocket", "polling"] });
-
-    socket.on("connect", () => {
-      log("[SIG] connected", socket.id);
-      connectBtn.innerText = "Disconnect";
-      joinBtn.disabled = false;
-      statusEl.innerText = "Status: connected";
-    });
-
-    socket.on("disconnect", (reason) => {
-      log("[SIG] disconnected", reason);
-      joinBtn.disabled = true;
-      statusEl.innerText = "Status: disconnected";
-    });
-
-    socket.on("connect_error", (err) => {
-      log("[SIG] connect_error", err.message || err);
-    });
-
-    socket.on("user_count", (c) => log("[SIG] user_count", c));
-
-    // MATCH FOUND
-    socket.on("match_found", async (payload) => {
-      log("[SIG] match_found RECEIVED (full):", JSON.stringify(payload));
-
-      currentRoom = payload.roomId;
-      isInitiator = !!payload.initiator;
-      statusEl.innerText = `Status: matched (initiator=${isInitiator})`;
-
-      await startWebRTCFlow(isInitiator);
-    });
-
-    // SIGNALING DATA (offer/answer/candidates)
-    socket.on("signal", async (data) => {
-      log("[SIG] signal RECEIVED (raw):", JSON.stringify(data));
-
-      if (!pc) {
-        log("[WEBRTC] no RTCPeerConnection yet");
-        return;
-      }
-
-      const d = data.payload;
-      if (!d) return;
-
-      // === SDP OFFER/ANSWER ===
-      if (d.type === "offer" || d.type === "answer") {
-        log("[WEBRTC] remote SDP type:", d.type);
-        await pc.setRemoteDescription(new RTCSessionDescription(d));
-
-        if (d.type === "offer") {
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          socket.emit("signal", { roomId: currentRoom, signalData: pc.localDescription });
-          log("[WEBRTC] sent answer");
+        async function leaveCall() {
+            if(localAudioTrack) {
+                localAudioTrack.close();
+                localAudioTrack = null;
+            }
+            await client.leave();
         }
-      }
-      // === ICE CANDIDATE ===
-      else if (d.candidate) {
-        log("[WEBRTC] remote ICE candidate received:", d.candidate.type);
-        try {
-          await pc.addIceCandidate(d);
-          log("[WEBRTC] addIceCandidate OK");
-        } catch (e) {
-          log("[WEBRTC] addIceCandidate ERROR", e);
-        }
-      }
-    });
-  };
 
-  // USER PRESSES "JOIN QUEUE"
-  joinBtn.onclick = () => {
-    if (!socket || !socket.connected) return alert("Not connected");
-    socket.emit("join_queue");
-    log("[SIG] join_queue sent");
-    statusEl.innerText = "Status: waiting for match...";
-  };
+        // --- 4. SOCKET EVENTS (Server Logic) ---
+        socket.on("match_found", async ({ roomId, initiator, partnerCountry }) => {
+            currentRoomId = roomId;
+            statusText.innerText = "Match Found! Connecting...";
+            locationBadge.innerText = `Partner Location: ${partnerCountry}`;
+            locationBadge.style.display = 'inline-block';
 
-  // =====================================================
-  // === START WEBRTC AFTER MATCH ========================
-  // =====================================================
-  async function startWebRTCFlow(initiator) {
-    // reset old connection if any
-    if (pc) { try { pc.close(); } catch(e){} }
-
-    pc = new RTCPeerConnection({ iceServers: DEFAULT_ICE });
-
-    // ICE candidate handler
-    pc.onicecandidate = (e) => {
-      log("[WEBRTC] local icecandidate:", e.candidate ? e.candidate.type : "null");
-      if (e.candidate) {
-        socket.emit("signal", {
-          roomId: currentRoom,
-          signalData: e.candidate
+            // AGORA MAGIC: Connect to the Room
+            // We use 'roomId' as the Channel Name.
+            // Token is null because we selected "App ID Only" mode.
+            await client.join(APP_ID, roomId, null, initiator ? 1 : 2);
+            
+            // Publish My Audio
+            await client.publish([localAudioTrack]);
+            
+            statusText.innerText = "Connected! Speak now.";
         });
-      }
-    };
 
-    // Connection state logs
-    pc.oniceconnectionstatechange = () => {
-      log("[WEBRTC] iceConnectionState:", pc.iceConnectionState);
-      statusEl.innerText = `ICE: ${pc.iceConnectionState}`;
-    };
+        // --- 5. AGORA EVENTS (Audio Handling) ---
+        client.on("user-published", async (user, mediaType) => {
+            await client.subscribe(user, mediaType);
+            
+            if (mediaType === "audio") {
+                // Play their audio
+                user.audioTrack.play();
+                statusText.innerText = "Connected! Speak now.";
+            }
+        });
 
-    // Remote audio
-    pc.ontrack = (e) => {
-      log("[WEBRTC] ontrack remote stream");
-      remoteAudio.srcObject = e.streams[0];
-    };
-
-    try {
-      // MIC ACCESS
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-      log("[WEBRTC] mic OK");
-    } catch (err) {
-      log("[WEBRTC] MIC ERROR:", err);
-      alert("Microphone access denied");
-      return;
-    }
-
-    // If initiator, create and send offer
-    if (initiator) {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit("signal", { roomId: currentRoom, signalData: pc.localDescription });
-      log("[WEBRTC] offer sent");
-    }
-
-    log("[WEBRTC] peer ready (initiator=" + initiator + ")");
-  }
-  </script>
+        client.on("user-left", () => {
+            statusText.innerText = "Partner disconnected.";
+            leaveCall();
+            setTimeout(() => location.reload(), 2000);
+        });
+    </script>
 </body>
 </html>
