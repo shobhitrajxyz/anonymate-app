@@ -29,7 +29,28 @@ async function getCountry(ip) {
     }
 }
 
+
+
+// ... existing imports ...
+
+// Helper to send the count to everyone
+function broadcastUserCount() {
+    // io.engine.clientsCount is a built-in feature of Socket.io
+    // It gives us the exact number of connected people
+    const count = io.engine.clientsCount;
+    
+    // "io.emit" sends a message to EVERYONE connected (Global Broadcast)
+    io.emit("user_count", count); 
+}
+
+
+
 io.on("connection", async (socket) => {
+
+
+    broadcastUserCount();
+
+
     // 1. Get User's IP
     let clientIp = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
     // On Render, IP might look like "1.2.3.4, 10.0.0.1". We want the first one.
@@ -76,6 +97,9 @@ io.on("connection", async (socket) => {
 
     socket.on("disconnect", () => {
         waitingQueue = waitingQueue.filter(s => s.id !== socket.id);
+
+
+        broadcastUserCount();
     });
 });
 
