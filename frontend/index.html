@@ -3,21 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AnonyMate Diagnostic</title>
+    <title>AnonyMate SSL Diagnostic</title>
     <style>
         body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
         .box { border: 1px solid #333; padding: 10px; margin-bottom: 10px; }
         button { padding: 15px; width: 100%; font-size: 1.2rem; cursor: pointer; background: #333; color: white; border: 1px solid #555; }
         #logs { height: 300px; overflow-y: scroll; border: 1px solid #555; background: #111; padding: 10px; white-space: pre-wrap; }
+        .success { color: #00ff00; font-weight: bold; }
+        .error { color: #ff0000; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h1>AnonyMate Diagnostic Mode</h1>
+    <h1>AnonyMate SSL Diagnostic</h1>
     
     <div class="box">
         <div id="status">Status: Idle</div>
         <div id="iceStatus">ICE Connection: New</div>
-        <div id="bytes">Data Received: 0</div>
     </div>
 
     <button id="startBtn">START / FIND PARTNER</button>
@@ -36,115 +37,88 @@
         const logs = document.getElementById('logs');
         const remoteAudio = document.getElementById('remoteAudio');
 
-        // --- ⬇️ INPUT YOUR METERED KEYS HERE ⬇️ ---
-        const turnUser = "4c004e71f89e70a872bae606";
-        const turnPass = "as7cdI2hhzUQh+87";
-        // -------------------------------------------
-
-        // Standard Config: Tries Everything. No strict blocks.
+        // --- 🔒 THE FIX: ENCRYPTED OPENRELAY KEYS ---
+        // We use 'turns:' (Secure) on Port 443 (HTTPS Port)
+        // Hardcoded so you don't need to copy-paste anything.
         const config = { 
             iceServers: [
-                { urls: "stun:stun.l.google.com:19302" }, // Google STUN
                 { 
-                    urls: "turn:global.turn.metered.ca:80?transport=udp",
-                    username: turnUser, credential: turnPass
+                    urls: "turns:openrelay.metered.ca:443?transport=tcp",
+                    username: "openrelayproject",
+                    credential: "openrelayproject"
                 },
                 { 
-                    urls: "turn:global.turn.metered.ca:80?transport=tcp",
-                    username: turnUser, credential: turnPass
+                    urls: "turn:openrelay.metered.ca:80",
+                    username: "openrelayproject",
+                    credential: "openrelayproject"
                 },
-                { 
-                    urls: "turn:global.turn.metered.ca:443?transport=tcp",
-                    username: turnUser, credential: turnPass
-                }
-            ]
+                { urls: "stun:stun.l.google.com:19302" }
+            ],
+            iceTransportPolicy: "all"
         };
 
-        function log(msg) {
-            logs.innerHTML += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+        function log(msg, type = 'normal') {
+            const span = type === 'error' ? ' class="error"' : type === 'success' ? ' class="success"' : '';
+            logs.innerHTML += `<div${span}>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
             logs.scrollTop = logs.scrollHeight;
-            console.log(msg);
         }
 
         let localStream, peerConnection, roomId;
-        let candidateQueue = [];
 
         startBtn.onclick = () => {
             startBtn.disabled = true;
             log("1. Requesting Microphone...");
             navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
                 localStream = stream;
-                log("2. Mic OK. Connecting to Server...");
+                log("2. Mic OK. Joining Server...");
                 socket.emit('join_queue');
-            }).catch(e => log("❌ MIC ERROR: " + e.message));
+            }).catch(e => log("❌ MIC ERROR: " + e.message, 'error'));
         };
 
-        socket.on("connect", () => log("✅ Connected to Signaling Server"));
-
-        socket.on("match_found", async ({ roomId: id, initiator, partnerCountry }) => {
+        socket.on("match_found", async ({ roomId: id, initiator }) => {
             roomId = id;
-            log(`3. Match Found! Partner: ${partnerCountry}. Initiator: ${initiator}`);
-            document.getElementById('status').innerText = "Status: Connecting...";
-
+            log(`3. Match Found! Initiator: ${initiator}`);
             createPeer(initiator);
         });
 
         function createPeer(initiator) {
             peerConnection = new RTCPeerConnection(config);
-            
-            // Add Mic Stream
             localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
 
-            // ICE Candidates (The Address Book)
+            // LOG EVERY CANDIDATE TO SEE IF RELAY WORKS
             peerConnection.onicecandidate = (e) => {
                 if (e.candidate) {
-                    // Check if it's a Relay (TURN) candidate
-                    if(e.candidate.type === 'relay') log("⚡ Generated RELAY Candidate (TURN is working)");
+                    if(e.candidate.type === 'relay') {
+                        log("⚡ SUCCESS: Generated SECURE RELAY Candidate!", 'success');
+                    }
                     socket.emit("signal", { roomId, signalData: { type: "candidate", candidate: e.candidate } });
                 }
             };
 
-            // Connection State Monitoring
             peerConnection.oniceconnectionstatechange = () => {
                 const state = peerConnection.iceConnectionState;
                 document.getElementById('iceStatus').innerText = `ICE Connection: ${state}`;
-                log(`🔄 ICE State Changed: ${state}`);
+                log(`🔄 Connection State: ${state}`);
                 
-                if (state === 'connected' || state === 'completed') {
-                    log("✅ P2P CONNECTION ESTABLISHED!");
+                if (state === 'connected') {
+                    log("✅ SUCCESS: P2P CONNECTION ESTABLISHED!", 'success');
                     document.getElementById('status').innerText = "Status: CONNECTED!";
-                } else if (state === 'failed' || state === 'disconnected') {
-                    log("❌ ICE Connection Failed. Firewall blocked path.");
+                } else if (state === 'failed') {
+                    log("❌ FAILED. Retrying with new candidates...", 'error');
+                    peerConnection.restartIce(); // Auto-Retry Logic
                 }
             };
 
-            // Audio Stream Handling
             peerConnection.ontrack = (e) => {
-                log("🔊 Audio Stream Received from Partner");
+                log("🔊 Audio Stream Received");
                 remoteAudio.srcObject = e.streams[0];
-                remoteAudio.play().then(() => log("🔊 Playing Audio..."))
-                                .catch(e => log("⚠️ Autoplay Blocked. Tap screen!"));
+                remoteAudio.play();
             };
 
-            // STATS LOOP
-            setInterval(() => {
-                if(peerConnection && (peerConnection.iceConnectionState === 'connected' || peerConnection.iceConnectionState === 'completed')) {
-                    peerConnection.getStats(null).then(stats => {
-                        stats.forEach(report => {
-                            if(report.type === 'inbound-rtp' && report.kind === 'audio') {
-                                document.getElementById('bytes').innerText = `Data Received: ${report.bytesReceived}`;
-                            }
-                        });
-                    });
-                }
-            }, 1000);
-
-            // Signal Logic
             if (initiator) {
                 peerConnection.createOffer().then(offer => {
                     peerConnection.setLocalDescription(offer);
                     socket.emit("signal", { roomId, signalData: { type: "offer", offer } });
-                    log("📤 Sent Offer");
                 });
             }
         }
@@ -152,32 +126,18 @@
         socket.on("signal", async (data) => {
             if (!peerConnection) return;
             if (data.type === "offer") {
-                log("📥 Received Offer");
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
                 const answer = await peerConnection.createAnswer();
                 await peerConnection.setLocalDescription(answer);
                 socket.emit("signal", { roomId, signalData: { type: "answer", answer } });
-                processQueue();
             } 
             else if (data.type === "answer") {
-                log("📥 Received Answer");
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                processQueue();
             } 
             else if (data.type === "candidate") {
-                if (peerConnection.remoteDescription) {
-                    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-                } else {
-                    candidateQueue.push(data.candidate);
-                }
+                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
             }
         });
-
-        async function processQueue() {
-            while (candidateQueue.length > 0) {
-                await peerConnection.addIceCandidate(new RTCIceCandidate(candidateQueue.shift()));
-            }
-        }
     </script>
 </body>
 </html>
