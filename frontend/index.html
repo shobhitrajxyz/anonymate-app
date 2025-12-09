@@ -15,6 +15,9 @@
         .btn-start { background: linear-gradient(135deg, #8A2BE2 0%, #4B0082 100%); color: white; padding: 16px 50px; font-size: 1.1rem; font-weight: 600; border: none; border-radius: 12px; cursor: pointer; box-shadow: 0 10px 25px rgba(75, 0, 130, 0.4); transition: transform 0.2s ease, box-shadow 0.2s ease; min-width: 200px; }
         .btn-stop { background: rgba(255, 75, 75, 0.2); border: 1px solid #ff4b4b; color: #ff4b4b; padding: 14px 40px; font-size: 1rem; border-radius: 12px; cursor: pointer; display: none; margin-top: 20px; font-weight: 600; }
         .status { color: rgba(255, 255, 255, 0.5); margin-top: 20px; font-size: 0.9rem; }
+        
+        /* THIS IS THE DEBUG TEXT STYLE */
+        #stats { position: fixed; bottom: 10px; left: 10px; font-size: 12px; color: #00d26a; background: rgba(0,0,0,0.5); padding: 5px; border-radius: 5px; font-family: monospace; }
     </style>
 </head>
 <body>
@@ -24,6 +27,10 @@
     <button class="btn-start" id="startBtn">Find an AnonyMate</button>
     <button class="btn-stop" id="stopBtn">End Call</button>
     <div class="status" id="status">Ready to connect</div>
+    
+    <!-- THIS IS WHERE THE DATA NUMBERS WILL APPEAR -->
+    <div id="stats"></div>
+
     <audio id="remoteAudio" autoplay playsinline></audio>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
@@ -35,26 +42,19 @@
         const turnPassword = "as7cdI2hhzUQh+87";
         // ⬆️⬆️ ----------------------- ⬆️⬆️
 
-        // --- 🛑 THE NUCLEAR FIX: ENCRYPTED TURN (TURNS) ---
         const config = { 
             iceServers: [
                 { 
-                    // 1. PRIORITY: SECURE TCP 443 (TURNS)
-                    // This creates an Encrypted SSL tunnel. ISP cannot see inside.
+                    // NUCLEAR FIX: Encrypted TCP 443
                     urls: "turns:global.turn.metered.ca:443?transport=tcp",
-                    username: turnUsername, 
-                    credential: turnPassword
+                    username: turnUsername, credential: turnPassword
                 },
                 { 
-                    // 2. Backup: Encrypted UDP (TURNS)
                     urls: "turns:global.turn.metered.ca:80?transport=udp",
-                    username: turnUsername, 
-                    credential: turnPassword
+                    username: turnUsername, credential: turnPassword
                 },
-                // 3. Fallback for Local Connections (Keeps it fast if you are neighbors)
                 { urls: "stun:stun.l.google.com:19302" }
             ],
-            // 'all' allows Local connections to work, but prioritizes the secure server
             iceTransportPolicy: "all"
         };
 
@@ -63,12 +63,12 @@
         const statusText = document.getElementById('status');
         const locationBadge = document.getElementById('locationBadge');
         const remoteAudio = document.getElementById('remoteAudio');
+        const statsDiv = document.getElementById('stats'); // Get the debug box
         
         let localStream, peerConnection, roomId;
         let candidateQueue = [];
 
         startBtn.onclick = () => {
-            // Wake up audio context for mobile browsers
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             if (AudioContext) { new AudioContext().resume(); }
 
@@ -83,7 +83,7 @@
                     socket.emit('join_queue');
                 })
                 .catch(e => {
-                    alert("Microphone denied. Please enable it in Settings.");
+                    alert("Microphone denied.");
                     startBtn.innerText = "Find an AnonyMate";
                 });
         };
@@ -101,8 +101,6 @@
             
             peerConnection.ontrack = (e) => {
                 remoteAudio.srcObject = e.streams[0];
-                
-                // FORCE PLAY
                 const playPromise = remoteAudio.play();
                 if (playPromise !== undefined) {
                     playPromise.catch(error => {
@@ -120,11 +118,25 @@
                 if (e.candidate) socket.emit("signal", { roomId, signalData: { type: "candidate", candidate: e.candidate } });
             };
             
-            peerConnection.onconnectionstatechange = () => {
-                if(peerConnection.connectionState === 'failed') {
-                    console.log("Connection failed. Retrying...");
+            // --- DEBUG STATS LOGIC (RESTORED) ---
+            // This runs every 1 second to check if data is flowing
+            setInterval(() => {
+                if (peerConnection && peerConnection.connectionState === 'connected') {
+                    peerConnection.getStats(null).then(stats => {
+                        let bytesReceived = 0;
+                        stats.forEach(report => {
+                            if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+                                bytesReceived = report.bytesReceived;
+                            }
+                        });
+                        // Update the screen with the number
+                        statsDiv.innerText = `Data Received: ${bytesReceived} bytes`;
+                    });
+                } else {
+                    statsDiv.innerText = "";
                 }
-            };
+            }, 1000);
+            // ------------------------------------
 
             if (initiator) {
                 const offer = await peerConnection.createOffer();
