@@ -1,143 +1,179 @@
-<!DOCTYPE html>
-<html lang="en">
+<!-- index.html -->
+<!doctype html>
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AnonyMate SSL Diagnostic</title>
-    <style>
-        body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
-        .box { border: 1px solid #333; padding: 10px; margin-bottom: 10px; }
-        button { padding: 15px; width: 100%; font-size: 1.2rem; cursor: pointer; background: #333; color: white; border: 1px solid #555; }
-        #logs { height: 300px; overflow-y: scroll; border: 1px solid #555; background: #111; padding: 10px; white-space: pre-wrap; }
-        .success { color: #00ff00; font-weight: bold; }
-        .error { color: #ff0000; font-weight: bold; }
-    </style>
+  <meta charset="utf-8" />
+  <title>WebRTC pair demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
 </head>
 <body>
-    <h1>AnonyMate SSL Diagnostic</h1>
-    
-    <div class="box">
-        <div id="status">Status: Idle</div>
-        <div id="iceStatus">ICE Connection: New</div>
-    </div>
+  <h3>Simple WebRTC Pair Demo</h3>
+  <div>
+    <label>Signaling URL: <input id="sigUrl" style="width:420px" value="https://anonymate-backend-chyg.onrender.com" /></label>
+    <button id="connectBtn">Connect</button>
+    <button id="joinBtn" disabled>Join Queue (Match)</button>
+  </div>
 
-    <button id="startBtn">START / FIND PARTNER</button>
+  <div>
+    <p id="status">Status: idle</p>
+    <p id="log"></p>
+  </div>
 
-    <div class="box">
-        <h3>Live Logs:</h3>
-        <div id="logs"></div>
-    </div>
+  <audio id="remoteAudio" autoplay playsinline></audio>
 
-    <audio id="remoteAudio" autoplay playsinline></audio>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+  // CONFIG - change only if you know what you're doing
+  const DEFAULT_ICE = [
+    { urls: "stun:stun.l.google.com:19302" },
+    // An example public metered relay (works for many apps). Replace if you run your own TURN.
+    { urls: ["turn:openrelay.metered.ca:80", "turn:openrelay.metered.ca:443?transport=tcp"] }
+  ];
 
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    <script>
-        const socket = io("https://anonymate-backend-chyg.onrender.com");
-        const startBtn = document.getElementById('startBtn');
-        const logs = document.getElementById('logs');
-        const remoteAudio = document.getElementById('remoteAudio');
+  // UI
+  const connectBtn = document.getElementById('connectBtn');
+  const joinBtn = document.getElementById('joinBtn');
+  const sigUrlInput = document.getElementById('sigUrl');
+  const statusEl = document.getElementById('status');
+  const logEl = document.getElementById('log');
+  const remoteAudio = document.getElementById('remoteAudio');
 
-        // --- 🔒 THE FIX: ENCRYPTED OPENRELAY KEYS ---
-        // We use 'turns:' (Secure) on Port 443 (HTTPS Port)
-        // Hardcoded so you don't need to copy-paste anything.
-        const config = { 
-            iceServers: [
-                { 
-                    urls: "turns:openrelay.metered.ca:443?transport=tcp",
-                    username: "openrelayproject",
-                    credential: "openrelayproject"
-                },
-                { 
-                    urls: "turn:openrelay.metered.ca:80",
-                    username: "openrelayproject",
-                    credential: "openrelayproject"
-                },
-                { urls: "stun:stun.l.google.com:19302" }
-            ],
-            iceTransportPolicy: "all"
-        };
+  function log(...args) {
+    console.log(...args);
+    logEl.innerText = (logEl.innerText ? logEl.innerText + "\n" : "") + args.join(" ");
+  }
 
-        function log(msg, type = 'normal') {
-            const span = type === 'error' ? ' class="error"' : type === 'success' ? ' class="success"' : '';
-            logs.innerHTML += `<div${span}>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
-            logs.scrollTop = logs.scrollHeight;
+  let socket = null;
+  let pc = null;
+  let localStream = null;
+  let currentRoom = null;
+  let isInitiator = false;
+
+  connectBtn.onclick = async () => {
+    if (socket && socket.connected) {
+      socket.close();
+      connectBtn.innerText = "Connect";
+      joinBtn.disabled = true;
+      statusEl.innerText = "Status: disconnected";
+      return;
+    }
+
+    const SIGNALING_URL = sigUrlInput.value.trim();
+    log("[UI] connecting to", SIGNALING_URL);
+    socket = io(SIGNALING_URL, { transports: ["websocket", "polling"] });
+
+    socket.on("connect", () => {
+      log("[SIG] connected", socket.id);
+      statusEl.innerText = "Status: connected";
+      connectBtn.innerText = "Disconnect";
+      joinBtn.disabled = false;
+    });
+
+    socket.on("disconnect", (r) => {
+      log("[SIG] disconnected", r);
+      statusEl.innerText = "Status: disconnected";
+      joinBtn.disabled = true;
+    });
+
+    socket.on("connect_error", (err) => {
+      log("[SIG] connect_error", err && err.message ? err.message : err);
+      statusEl.innerText = "Status: connect_error";
+    });
+
+    socket.on("user_count", (c) => log("[SIG] user_count", c));
+
+    socket.on("match_found", async (payload) => {
+      log("[SIG] match_found RECEIVED", payload);
+      currentRoom = payload.roomId;
+      isInitiator = !!payload.initiator;
+      statusEl.innerText = `Status: matched (initiator=${isInitiator})`;
+
+      // start WebRTC flow
+      await startWebRTCFlow(isInitiator);
+    });
+
+    socket.on("signal", async (data) => {
+      log("[SIG] signal RECEIVED", data);
+      if (!pc) {
+        log("[WEBRTC] no RTCPeerConnection yet");
+        return;
+      }
+      const d = data.payload;
+      if (!d) return;
+
+      if (d.type === "offer" || d.type === "answer") {
+        await pc.setRemoteDescription(new RTCSessionDescription(d));
+        log("[WEBRTC] setRemoteDescription", d.type);
+        if (d.type === "offer") {
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socket.emit("signal", { roomId: currentRoom, signalData: pc.localDescription });
+          log("[WEBRTC] sent answer");
         }
-
-        let localStream, peerConnection, roomId;
-
-        startBtn.onclick = () => {
-            startBtn.disabled = true;
-            log("1. Requesting Microphone...");
-            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-                localStream = stream;
-                log("2. Mic OK. Joining Server...");
-                socket.emit('join_queue');
-            }).catch(e => log("❌ MIC ERROR: " + e.message, 'error'));
-        };
-
-        socket.on("match_found", async ({ roomId: id, initiator }) => {
-            roomId = id;
-            log(`3. Match Found! Initiator: ${initiator}`);
-            createPeer(initiator);
-        });
-
-        function createPeer(initiator) {
-            peerConnection = new RTCPeerConnection(config);
-            localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
-
-            // LOG EVERY CANDIDATE TO SEE IF RELAY WORKS
-            peerConnection.onicecandidate = (e) => {
-                if (e.candidate) {
-                    if(e.candidate.type === 'relay') {
-                        log("⚡ SUCCESS: Generated SECURE RELAY Candidate!", 'success');
-                    }
-                    socket.emit("signal", { roomId, signalData: { type: "candidate", candidate: e.candidate } });
-                }
-            };
-
-            peerConnection.oniceconnectionstatechange = () => {
-                const state = peerConnection.iceConnectionState;
-                document.getElementById('iceStatus').innerText = `ICE Connection: ${state}`;
-                log(`🔄 Connection State: ${state}`);
-                
-                if (state === 'connected') {
-                    log("✅ SUCCESS: P2P CONNECTION ESTABLISHED!", 'success');
-                    document.getElementById('status').innerText = "Status: CONNECTED!";
-                } else if (state === 'failed') {
-                    log("❌ FAILED. Retrying with new candidates...", 'error');
-                    peerConnection.restartIce(); // Auto-Retry Logic
-                }
-            };
-
-            peerConnection.ontrack = (e) => {
-                log("🔊 Audio Stream Received");
-                remoteAudio.srcObject = e.streams[0];
-                remoteAudio.play();
-            };
-
-            if (initiator) {
-                peerConnection.createOffer().then(offer => {
-                    peerConnection.setLocalDescription(offer);
-                    socket.emit("signal", { roomId, signalData: { type: "offer", offer } });
-                });
-            }
+      } else if (d.candidate) {
+        try {
+          await pc.addIceCandidate(d);
+          log("[WEBRTC] added remote ICE candidate");
+        } catch (e) {
+          log("[WEBRTC] addIceCandidate error", e);
         }
+      }
+    });
+  };
 
-        socket.on("signal", async (data) => {
-            if (!peerConnection) return;
-            if (data.type === "offer") {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-                socket.emit("signal", { roomId, signalData: { type: "answer", answer } });
-            } 
-            else if (data.type === "answer") {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-            } 
-            else if (data.type === "candidate") {
-                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-            }
-        });
-    </script>
+  joinBtn.onclick = () => {
+    if (!socket || !socket.connected) return alert("Not connected to signaling");
+    socket.emit("join_queue");
+    log("[SIG] join_queue sent");
+    statusEl.innerText = "Status: waiting for match...";
+  };
+
+  // WebRTC flow
+  async function startWebRTCFlow(initiator) {
+    // cleanup existing
+    if (pc) {
+      try { pc.close(); } catch(e){}
+      pc = null;
+    }
+
+    pc = new RTCPeerConnection({ iceServers: DEFAULT_ICE });
+
+    pc.onicecandidate = (e) => {
+      log("[WEBRTC] icecandidate", e.candidate && e.candidate.type);
+      if (e.candidate) {
+        socket.emit("signal", { roomId: currentRoom, signalData: e.candidate });
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      log("[WEBRTC] iceConnectionState:", pc.iceConnectionState);
+      statusEl.innerText = `Status: iceState=${pc.iceConnectionState}`;
+    };
+
+    pc.ontrack = (e) => {
+      log("[WEBRTC] ontrack", e.streams && e.streams[0]);
+      remoteAudio.srcObject = e.streams[0];
+    };
+
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+    } catch (e) {
+      log("[WEBRTC] getUserMedia failed", e);
+      alert("Microphone access needed");
+      return;
+    }
+
+    if (initiator) {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit("signal", { roomId: currentRoom, signalData: pc.localDescription });
+      log("[WEBRTC] offer sent");
+    }
+
+    // show local status
+    log("[WEBRTC] peer ready (initiator=" + initiator + ")");
+  }
+  </script>
 </body>
 </html>
