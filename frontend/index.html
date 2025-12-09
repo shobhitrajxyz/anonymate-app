@@ -13,12 +13,8 @@
         h1 { font-size: 2rem; font-weight: 700; margin: 0 0 5px 0; color: #d0a3ff; letter-spacing: 1px; }
         .location-badge { background: rgba(255, 255, 255, 0.1); padding: 6px 16px; border-radius: 20px; font-size: 0.85rem; color: #ccc; margin-bottom: 40px; display: none; border: 1px solid rgba(255, 255, 255, 0.1); }
         .btn-start { background: linear-gradient(135deg, #8A2BE2 0%, #4B0082 100%); color: white; padding: 16px 50px; font-size: 1.1rem; font-weight: 600; border: none; border-radius: 12px; cursor: pointer; box-shadow: 0 10px 25px rgba(75, 0, 130, 0.4); transition: transform 0.2s ease, box-shadow 0.2s ease; min-width: 200px; }
-        .btn-start:hover { transform: translateY(-2px); box-shadow: 0 15px 35px rgba(75, 0, 130, 0.6); }
         .btn-stop { background: rgba(255, 75, 75, 0.2); border: 1px solid #ff4b4b; color: #ff4b4b; padding: 14px 40px; font-size: 1rem; border-radius: 12px; cursor: pointer; display: none; margin-top: 20px; font-weight: 600; }
         .status { color: rgba(255, 255, 255, 0.5); margin-top: 20px; font-size: 0.9rem; }
-        
-        /* Debug Stats (Tiny text at bottom) */
-        #stats { position: fixed; bottom: 10px; font-size: 10px; color: #555; }
     </style>
 </head>
 <body>
@@ -28,37 +24,38 @@
     <button class="btn-start" id="startBtn">Find an AnonyMate</button>
     <button class="btn-stop" id="stopBtn">End Call</button>
     <div class="status" id="status">Ready to connect</div>
-    <div id="stats"></div>
-
     <audio id="remoteAudio" autoplay playsinline></audio>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         const socket = io("https://anonymate-backend-chyg.onrender.com"); 
-        
+
         // ⬇️⬇️ PASTE METERED KEYS HERE ⬇️⬇️
         const turnUsername = "4c004e71f89e70a872bae606"; 
         const turnPassword = "as7cdI2hhzUQh+87";
         // ⬆️⬆️ ----------------------- ⬆️⬆️
 
-        // --- 🛑 STRICT TCP CONFIGURATION (The Fix) ---
+        // --- 🛑 THE NUCLEAR FIX: ENCRYPTED TURN (TURNS) ---
         const config = { 
             iceServers: [
                 { 
-                    // 1. Force Port 443 (HTTPS-like) using TCP
-                    urls: "turn:global.turn.metered.ca:443?transport=tcp",
-                    username: turnUsername, credential: turnPassword
+                    // 1. PRIORITY: SECURE TCP 443 (TURNS)
+                    // This creates an Encrypted SSL tunnel. ISP cannot see inside.
+                    urls: "turns:global.turn.metered.ca:443?transport=tcp",
+                    username: turnUsername, 
+                    credential: turnPassword
                 },
                 { 
-                    // 2. Backup Port 80 using TCP
-                    urls: "turn:global.turn.metered.ca:80?transport=tcp",
-                    username: turnUsername, credential: turnPassword
+                    // 2. Backup: Encrypted UDP (TURNS)
+                    urls: "turns:global.turn.metered.ca:80?transport=udp",
+                    username: turnUsername, 
+                    credential: turnPassword
                 },
-                // Removed UDP options to force stability over speed
+                // 3. Fallback for Local Connections (Keeps it fast if you are neighbors)
                 { urls: "stun:stun.l.google.com:19302" }
             ],
-            // Only use Relay if direct fails quickly
-            iceTransportPolicy: "all" 
+            // 'all' allows Local connections to work, but prioritizes the secure server
+            iceTransportPolicy: "all"
         };
 
         const startBtn = document.getElementById('startBtn');
@@ -66,22 +63,15 @@
         const statusText = document.getElementById('status');
         const locationBadge = document.getElementById('locationBadge');
         const remoteAudio = document.getElementById('remoteAudio');
-        const statsDiv = document.getElementById('stats');
         
         let localStream, peerConnection, roomId;
         let candidateQueue = [];
 
-        // --- AUDIO WAKE-UP SYSTEM ---
-        function wakeUpAudio() {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            if (AudioContext) {
-                const ctx = new AudioContext();
-                ctx.resume().then(() => console.log("Audio Context Resumed"));
-            }
-        }
-
         startBtn.onclick = () => {
-            wakeUpAudio(); // Wake up speakers immediately
+            // Wake up audio context for mobile browsers
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (AudioContext) { new AudioContext().resume(); }
+
             startBtn.innerText = "Accessing Mic...";
             navigator.mediaDevices.getUserMedia({ audio: true, video: false })
                 .then(stream => {
@@ -93,7 +83,7 @@
                     socket.emit('join_queue');
                 })
                 .catch(e => {
-                    alert("Microphone access failed.");
+                    alert("Microphone denied. Please enable it in Settings.");
                     startBtn.innerText = "Find an AnonyMate";
                 });
         };
@@ -110,48 +100,31 @@
             localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
             
             peerConnection.ontrack = (e) => {
-                console.log("Stream received!");
                 remoteAudio.srcObject = e.streams[0];
                 
-                // Aggressive Audio Play
-                remoteAudio.play()
-                    .then(() => statusText.innerText = "Connected! Speak now.")
-                    .catch(e => {
-                        console.log("Autoplay blocked");
+                // FORCE PLAY
+                const playPromise = remoteAudio.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
                         statusText.innerText = "TAP SCREEN TO HEAR AUDIO";
-                        document.body.addEventListener('click', () => remoteAudio.play(), {once:true});
+                        document.body.addEventListener('click', () => {
+                            remoteAudio.play();
+                            statusText.innerText = "Connected! Speak now.";
+                        }, { once: true });
                     });
+                }
+                statusText.innerText = "Connected! Speak now.";
             };
 
             peerConnection.onicecandidate = (e) => {
                 if (e.candidate) socket.emit("signal", { roomId, signalData: { type: "candidate", candidate: e.candidate } });
             };
-
-            // Monitor Connection State
+            
             peerConnection.onconnectionstatechange = () => {
-                const state = peerConnection.connectionState;
-                console.log("Connection State:", state);
-                if (state === 'failed') {
-                    statusText.innerText = "Connection Failed. Retrying...";
-                    // Auto-reload to try again is usually best for failed states
-                    setTimeout(() => location.reload(), 2000);
+                if(peerConnection.connectionState === 'failed') {
+                    console.log("Connection failed. Retrying...");
                 }
             };
-            
-            // --- STATS MONITOR (Is data flowing?) ---
-            setInterval(() => {
-                if(peerConnection && peerConnection.connectionState === 'connected'){
-                    peerConnection.getStats(null).then(stats => {
-                        let bytesReceived = 0;
-                        stats.forEach(report => {
-                            if(report.type === 'inbound-rtp' && report.kind === 'audio'){
-                                bytesReceived = report.bytesReceived;
-                            }
-                        });
-                        statsDiv.innerText = `Data Received: ${bytesReceived} bytes`;
-                    });
-                }
-            }, 1000);
 
             if (initiator) {
                 const offer = await peerConnection.createOffer();
@@ -162,24 +135,26 @@
 
         socket.on("signal", async (data) => {
             if (!peerConnection) return;
-            if (data.type === "offer") {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-                socket.emit("signal", { roomId, signalData: { type: "answer", answer } });
-                processQueue();
-            } 
-            else if (data.type === "answer") {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                processQueue();
-            } 
-            else if (data.type === "candidate") {
-                if (peerConnection.remoteDescription) {
-                    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-                } else {
-                    candidateQueue.push(data.candidate);
+            try {
+                if (data.type === "offer") {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    socket.emit("signal", { roomId, signalData: { type: "answer", answer } });
+                    processQueue();
+                } 
+                else if (data.type === "answer") {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                    processQueue();
+                } 
+                else if (data.type === "candidate") {
+                    if (peerConnection.remoteDescription) {
+                        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                    } else {
+                        candidateQueue.push(data.candidate);
+                    }
                 }
-            }
+            } catch(e) { console.error(e); }
         });
 
         async function processQueue() {
