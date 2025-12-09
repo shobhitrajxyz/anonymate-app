@@ -15,8 +15,6 @@
         .btn-start { background: linear-gradient(135deg, #8A2BE2 0%, #4B0082 100%); color: white; padding: 16px 50px; font-size: 1.1rem; font-weight: 600; border: none; border-radius: 12px; cursor: pointer; box-shadow: 0 10px 25px rgba(75, 0, 130, 0.4); transition: transform 0.2s ease, box-shadow 0.2s ease; min-width: 200px; }
         .btn-stop { background: rgba(255, 75, 75, 0.2); border: 1px solid #ff4b4b; color: #ff4b4b; padding: 14px 40px; font-size: 1rem; border-radius: 12px; cursor: pointer; display: none; margin-top: 20px; font-weight: 600; }
         .status { color: rgba(255, 255, 255, 0.5); margin-top: 20px; font-size: 0.9rem; }
-        
-        /* THIS IS THE DEBUG TEXT STYLE */
         #stats { position: fixed; bottom: 10px; left: 10px; font-size: 12px; color: #00d26a; background: rgba(0,0,0,0.5); padding: 5px; border-radius: 5px; font-family: monospace; }
     </style>
 </head>
@@ -27,31 +25,31 @@
     <button class="btn-start" id="startBtn">Find an AnonyMate</button>
     <button class="btn-stop" id="stopBtn">End Call</button>
     <div class="status" id="status">Ready to connect</div>
-    
-    <!-- THIS IS WHERE THE DATA NUMBERS WILL APPEAR -->
     <div id="stats"></div>
-
     <audio id="remoteAudio" autoplay playsinline></audio>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
+        // YOUR RENDER URL
         const socket = io("https://anonymate-backend-chyg.onrender.com"); 
 
-        // ⬇️⬇️ PASTE METERED KEYS HERE ⬇️⬇️
-        const turnUsername = "4c004e71f89e70a872bae606"; 
-        const turnPassword = "as7cdI2hhzUQh+87";
-        // ⬆️⬆️ ----------------------- ⬆️⬆️
-
+        // --- THE UNIVERSAL BYPASS CONFIG ---
+        // We are using OpenRelay Public Keys on Port 443 (HTTPS Port)
+        // No personal keys needed.
         const config = { 
             iceServers: [
                 { 
-                    // NUCLEAR FIX: Encrypted TCP 443
-                    urls: "turns:global.turn.metered.ca:443?transport=tcp",
-                    username: turnUsername, credential: turnPassword
+                    // 1. TURNS (Encrypted) on Port 443. 
+                    // This looks like banking traffic. ISP cannot block it.
+                    urls: "turns:openrelay.metered.ca:443?transport=tcp",
+                    username: "openrelayproject",
+                    credential: "openrelayproject"
                 },
                 { 
-                    urls: "turns:global.turn.metered.ca:80?transport=udp",
-                    username: turnUsername, credential: turnPassword
+                    // 2. Standard TURN on Port 80 (Backup)
+                    urls: "turn:openrelay.metered.ca:80",
+                    username: "openrelayproject",
+                    credential: "openrelayproject"
                 },
                 { urls: "stun:stun.l.google.com:19302" }
             ],
@@ -63,7 +61,7 @@
         const statusText = document.getElementById('status');
         const locationBadge = document.getElementById('locationBadge');
         const remoteAudio = document.getElementById('remoteAudio');
-        const statsDiv = document.getElementById('stats'); // Get the debug box
+        const statsDiv = document.getElementById('stats');
         
         let localStream, peerConnection, roomId;
         let candidateQueue = [];
@@ -118,8 +116,7 @@
                 if (e.candidate) socket.emit("signal", { roomId, signalData: { type: "candidate", candidate: e.candidate } });
             };
             
-            // --- DEBUG STATS LOGIC (RESTORED) ---
-            // This runs every 1 second to check if data is flowing
+            // STATS: Watch the bottom left number
             setInterval(() => {
                 if (peerConnection && peerConnection.connectionState === 'connected') {
                     peerConnection.getStats(null).then(stats => {
@@ -129,14 +126,10 @@
                                 bytesReceived = report.bytesReceived;
                             }
                         });
-                        // Update the screen with the number
                         statsDiv.innerText = `Data Received: ${bytesReceived} bytes`;
                     });
-                } else {
-                    statsDiv.innerText = "";
                 }
             }, 1000);
-            // ------------------------------------
 
             if (initiator) {
                 const offer = await peerConnection.createOffer();
