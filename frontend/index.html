@@ -3,163 +3,174 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AnonyMate</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <title>AnonyMate Diagnostic</title>
     <style>
-        :root { --primary: #8A2BE2; --bg-gradient: radial-gradient(circle at center, #240046 0%, #10002b 100%); --text-color: #ffffff; }
-        body { background: var(--bg-gradient); color: var(--text-color); font-family: 'Inter', sans-serif; margin: 0; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-        .logo-container { width: 120px; height: 120px; border-radius: 50%; border: 2px solid rgba(138, 43, 226, 0.5); display: flex; align-items: center; justify-content: center; margin-bottom: 20px; box-shadow: 0 0 30px rgba(138, 43, 226, 0.2); background: rgba(255, 255, 255, 0.05); }
-        .logo-img { width: 60px; height: auto; filter: drop-shadow(0 0 10px rgba(138, 43, 226, 0.6)); }
-        h1 { font-size: 2rem; font-weight: 700; margin: 0 0 5px 0; color: #d0a3ff; letter-spacing: 1px; }
-        .location-badge { background: rgba(255, 255, 255, 0.1); padding: 6px 16px; border-radius: 20px; font-size: 0.85rem; color: #ccc; margin-bottom: 40px; display: none; border: 1px solid rgba(255, 255, 255, 0.1); }
-        .btn-start { background: linear-gradient(135deg, #8A2BE2 0%, #4B0082 100%); color: white; padding: 16px 50px; font-size: 1.1rem; font-weight: 600; border: none; border-radius: 12px; cursor: pointer; box-shadow: 0 10px 25px rgba(75, 0, 130, 0.4); transition: transform 0.2s ease, box-shadow 0.2s ease; min-width: 200px; }
-        .btn-stop { background: rgba(255, 75, 75, 0.2); border: 1px solid #ff4b4b; color: #ff4b4b; padding: 14px 40px; font-size: 1rem; border-radius: 12px; cursor: pointer; display: none; margin-top: 20px; font-weight: 600; }
-        .status { color: rgba(255, 255, 255, 0.5); margin-top: 20px; font-size: 0.9rem; }
-        #stats { position: fixed; bottom: 10px; left: 10px; font-size: 12px; color: #00d26a; background: rgba(0,0,0,0.5); padding: 5px; border-radius: 5px; font-family: monospace; }
+        body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
+        .box { border: 1px solid #333; padding: 10px; margin-bottom: 10px; }
+        button { padding: 15px; width: 100%; font-size: 1.2rem; cursor: pointer; background: #333; color: white; border: 1px solid #555; }
+        #logs { height: 300px; overflow-y: scroll; border: 1px solid #555; background: #111; padding: 10px; white-space: pre-wrap; }
     </style>
 </head>
 <body>
-    <div class="logo-container"><img src="https://i.postimg.cc/TKkvv3HF/Anony-Mate-Logo.png" alt="Mic" class="logo-img"></div>
-    <h1>AnonyMate</h1>
-    <div class="location-badge" id="locationBadge">Partner: Unknown</div>
-    <button class="btn-start" id="startBtn">Find an AnonyMate</button>
-    <button class="btn-stop" id="stopBtn">End Call</button>
-    <div class="status" id="status">Ready to connect</div>
-    <div id="stats"></div>
+    <h1>AnonyMate Diagnostic Mode</h1>
+    
+    <div class="box">
+        <div id="status">Status: Idle</div>
+        <div id="iceStatus">ICE Connection: New</div>
+        <div id="bytes">Data Received: 0</div>
+    </div>
+
+    <button id="startBtn">START / FIND PARTNER</button>
+
+    <div class="box">
+        <h3>Live Logs:</h3>
+        <div id="logs"></div>
+    </div>
+
     <audio id="remoteAudio" autoplay playsinline></audio>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        // YOUR RENDER URL
-        const socket = io("https://anonymate-backend-chyg.onrender.com"); 
+        const socket = io("https://anonymate-backend-chyg.onrender.com");
+        const startBtn = document.getElementById('startBtn');
+        const logs = document.getElementById('logs');
+        const remoteAudio = document.getElementById('remoteAudio');
 
-        // --- THE UNIVERSAL BYPASS CONFIG ---
-        // We are using OpenRelay Public Keys on Port 443 (HTTPS Port)
-        // No personal keys needed.
+        // --- ⬇️ INPUT YOUR METERED KEYS HERE ⬇️ ---
+        const turnUser = "4c004e71f89e70a872bae606";
+        const turnPass = "as7cdI2hhzUQh+87";
+        // -------------------------------------------
+
+        // Standard Config: Tries Everything. No strict blocks.
         const config = { 
             iceServers: [
+                { urls: "stun:stun.l.google.com:19302" }, // Google STUN
                 { 
-                    // 1. TURNS (Encrypted) on Port 443. 
-                    // This looks like banking traffic. ISP cannot block it.
-                    urls: "turns:openrelay.metered.ca:443?transport=tcp",
-                    username: "openrelayproject",
-                    credential: "openrelayproject"
+                    urls: "turn:global.turn.metered.ca:80?transport=udp",
+                    username: turnUser, credential: turnPass
                 },
                 { 
-                    // 2. Standard TURN on Port 80 (Backup)
-                    urls: "turn:openrelay.metered.ca:80",
-                    username: "openrelayproject",
-                    credential: "openrelayproject"
+                    urls: "turn:global.turn.metered.ca:80?transport=tcp",
+                    username: turnUser, credential: turnPass
                 },
-                { urls: "stun:stun.l.google.com:19302" }
-            ],
-            iceTransportPolicy: "all"
+                { 
+                    urls: "turn:global.turn.metered.ca:443?transport=tcp",
+                    username: turnUser, credential: turnPass
+                }
+            ]
         };
 
-        const startBtn = document.getElementById('startBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const statusText = document.getElementById('status');
-        const locationBadge = document.getElementById('locationBadge');
-        const remoteAudio = document.getElementById('remoteAudio');
-        const statsDiv = document.getElementById('stats');
-        
+        function log(msg) {
+            logs.innerHTML += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+            logs.scrollTop = logs.scrollHeight;
+            console.log(msg);
+        }
+
         let localStream, peerConnection, roomId;
         let candidateQueue = [];
 
         startBtn.onclick = () => {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            if (AudioContext) { new AudioContext().resume(); }
-
-            startBtn.innerText = "Accessing Mic...";
-            navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-                .then(stream => {
-                    localStream = stream;
-                    statusText.innerText = "Searching...";
-                    startBtn.style.display = 'none';
-                    stopBtn.style.display = 'block'; 
-                    locationBadge.style.display = 'none';
-                    socket.emit('join_queue');
-                })
-                .catch(e => {
-                    alert("Microphone denied.");
-                    startBtn.innerText = "Find an AnonyMate";
-                });
+            startBtn.disabled = true;
+            log("1. Requesting Microphone...");
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                localStream = stream;
+                log("2. Mic OK. Connecting to Server...");
+                socket.emit('join_queue');
+            }).catch(e => log("❌ MIC ERROR: " + e.message));
         };
 
-        stopBtn.onclick = () => location.reload();
+        socket.on("connect", () => log("✅ Connected to Signaling Server"));
 
         socket.on("match_found", async ({ roomId: id, initiator, partnerCountry }) => {
             roomId = id;
-            statusText.innerText = "Connecting...";
-            locationBadge.innerText = `Partner Location: ${partnerCountry}`;
-            locationBadge.style.display = 'inline-block';
+            log(`3. Match Found! Partner: ${partnerCountry}. Initiator: ${initiator}`);
+            document.getElementById('status').innerText = "Status: Connecting...";
 
+            createPeer(initiator);
+        });
+
+        function createPeer(initiator) {
             peerConnection = new RTCPeerConnection(config);
-            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
             
-            peerConnection.ontrack = (e) => {
-                remoteAudio.srcObject = e.streams[0];
-                const playPromise = remoteAudio.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch(error => {
-                        statusText.innerText = "TAP SCREEN TO HEAR AUDIO";
-                        document.body.addEventListener('click', () => {
-                            remoteAudio.play();
-                            statusText.innerText = "Connected! Speak now.";
-                        }, { once: true });
-                    });
+            // Add Mic Stream
+            localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+
+            // ICE Candidates (The Address Book)
+            peerConnection.onicecandidate = (e) => {
+                if (e.candidate) {
+                    // Check if it's a Relay (TURN) candidate
+                    if(e.candidate.type === 'relay') log("⚡ Generated RELAY Candidate (TURN is working)");
+                    socket.emit("signal", { roomId, signalData: { type: "candidate", candidate: e.candidate } });
                 }
-                statusText.innerText = "Connected! Speak now.";
             };
 
-            peerConnection.onicecandidate = (e) => {
-                if (e.candidate) socket.emit("signal", { roomId, signalData: { type: "candidate", candidate: e.candidate } });
+            // Connection State Monitoring
+            peerConnection.oniceconnectionstatechange = () => {
+                const state = peerConnection.iceConnectionState;
+                document.getElementById('iceStatus').innerText = `ICE Connection: ${state}`;
+                log(`🔄 ICE State Changed: ${state}`);
+                
+                if (state === 'connected' || state === 'completed') {
+                    log("✅ P2P CONNECTION ESTABLISHED!");
+                    document.getElementById('status').innerText = "Status: CONNECTED!";
+                } else if (state === 'failed' || state === 'disconnected') {
+                    log("❌ ICE Connection Failed. Firewall blocked path.");
+                }
             };
-            
-            // STATS: Watch the bottom left number
+
+            // Audio Stream Handling
+            peerConnection.ontrack = (e) => {
+                log("🔊 Audio Stream Received from Partner");
+                remoteAudio.srcObject = e.streams[0];
+                remoteAudio.play().then(() => log("🔊 Playing Audio..."))
+                                .catch(e => log("⚠️ Autoplay Blocked. Tap screen!"));
+            };
+
+            // STATS LOOP
             setInterval(() => {
-                if (peerConnection && peerConnection.connectionState === 'connected') {
+                if(peerConnection && (peerConnection.iceConnectionState === 'connected' || peerConnection.iceConnectionState === 'completed')) {
                     peerConnection.getStats(null).then(stats => {
-                        let bytesReceived = 0;
                         stats.forEach(report => {
-                            if (report.type === 'inbound-rtp' && report.kind === 'audio') {
-                                bytesReceived = report.bytesReceived;
+                            if(report.type === 'inbound-rtp' && report.kind === 'audio') {
+                                document.getElementById('bytes').innerText = `Data Received: ${report.bytesReceived}`;
                             }
                         });
-                        statsDiv.innerText = `Data Received: ${bytesReceived} bytes`;
                     });
                 }
             }, 1000);
 
+            // Signal Logic
             if (initiator) {
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-                socket.emit("signal", { roomId, signalData: { type: "offer", offer } });
+                peerConnection.createOffer().then(offer => {
+                    peerConnection.setLocalDescription(offer);
+                    socket.emit("signal", { roomId, signalData: { type: "offer", offer } });
+                    log("📤 Sent Offer");
+                });
             }
-        });
+        }
 
         socket.on("signal", async (data) => {
             if (!peerConnection) return;
-            try {
-                if (data.type === "offer") {
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-                    const answer = await peerConnection.createAnswer();
-                    await peerConnection.setLocalDescription(answer);
-                    socket.emit("signal", { roomId, signalData: { type: "answer", answer } });
-                    processQueue();
-                } 
-                else if (data.type === "answer") {
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                    processQueue();
-                } 
-                else if (data.type === "candidate") {
-                    if (peerConnection.remoteDescription) {
-                        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-                    } else {
-                        candidateQueue.push(data.candidate);
-                    }
+            if (data.type === "offer") {
+                log("📥 Received Offer");
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                socket.emit("signal", { roomId, signalData: { type: "answer", answer } });
+                processQueue();
+            } 
+            else if (data.type === "answer") {
+                log("📥 Received Answer");
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                processQueue();
+            } 
+            else if (data.type === "candidate") {
+                if (peerConnection.remoteDescription) {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                } else {
+                    candidateQueue.push(data.candidate);
                 }
-            } catch(e) { console.error(e); }
+            }
         });
 
         async function processQueue() {
