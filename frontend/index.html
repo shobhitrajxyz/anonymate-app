@@ -6,177 +6,42 @@
     <title>AnonyMate</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --primary: #8A2BE2; /* BlueViolet */
-            --primary-gradient: linear-gradient(135deg, #8A2BE2 0%, #4B0082 100%);
-            --bg-gradient: radial-gradient(circle at center, #240046 0%, #10002b 100%);
-            --text-color: #ffffff;
-        }
-
-        body {
-            background: var(--bg-gradient);
-            color: var(--text-color);
-            font-family: 'Inter', sans-serif;
-            margin: 0;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-        }
-
-        /* The Logo Circle */
-        .logo-container {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            border: 2px solid rgba(138, 43, 226, 0.5); /* Subtle purple ring */
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
-            box-shadow: 0 0 30px rgba(138, 43, 226, 0.2);
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .logo-img {
-            width: 60px;
-            height: auto;
-            /* Invert color to make black icons white if needed, or use your specific PNG */
-            filter: drop-shadow(0 0 10px rgba(138, 43, 226, 0.6));
-        }
-
-        h1 {
-            font-size: 2rem;
-            font-weight: 700;
-            margin: 0 0 5px 0;
-            color: #d0a3ff; /* Light purple text */
-            letter-spacing: 1px;
-        }
-
-        /* Location Badge */
-        .location-badge { 
-            background: rgba(255, 255, 255, 0.1); 
-            padding: 6px 16px; 
-            border-radius: 20px; 
-            font-size: 0.85rem; 
-            color: #ccc; 
-            margin-bottom: 40px; 
-            display: none; /* Hidden until matched */
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        /* The Main Button */
-        .btn-start {
-            background: var(--primary-gradient);
-            color: white;
-            padding: 16px 50px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            box-shadow: 0 10px 25px rgba(75, 0, 130, 0.4);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            min-width: 200px;
-        }
-
-        .btn-start:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 15px 35px rgba(75, 0, 130, 0.6);
-        }
-
-        .btn-start:active {
-            transform: translateY(0);
-        }
-
-        /* Red "End Call" Button (Hidden initially) */
-        .btn-stop {
-            background: rgba(255, 75, 75, 0.2);
-            border: 1px solid #ff4b4b;
-            color: #ff4b4b;
-            padding: 14px 40px;
-            font-size: 1rem;
-            border-radius: 12px;
-            cursor: pointer;
-            display: none;
-            margin-top: 20px;
-            font-weight: 600;
-        }
-        .btn-stop:hover { background: rgba(255, 75, 75, 0.3); }
-
-        .status { 
-            color: rgba(255, 255, 255, 0.5); 
-            margin-top: 20px; 
-            font-size: 0.9rem; 
-        }
-
-        /* Live User Counter */
-        .live-badge {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid rgba(138, 43, 226, 0.3);
-            padding: 8px 15px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            color: #fff;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            backdrop-filter: blur(5px);
-        }
-
-        /* The Pulsing Green Dot */
-        .live-dot {
-            width: 8px;
-            height: 8px;
-            background-color: #00d26a;
-            border-radius: 50%;
-            box-shadow: 0 0 10px #00d26a;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(1.2); }
-            100% { opacity: 1; transform: scale(1); }
-        }
+        :root { --primary: #8A2BE2; --bg-gradient: radial-gradient(circle at center, #240046 0%, #10002b 100%); --text-color: #ffffff; }
+        body { background: var(--bg-gradient); color: var(--text-color); font-family: 'Inter', sans-serif; margin: 0; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        .logo-container { width: 120px; height: 120px; border-radius: 50%; border: 2px solid rgba(138, 43, 226, 0.5); display: flex; align-items: center; justify-content: center; margin-bottom: 20px; box-shadow: 0 0 30px rgba(138, 43, 226, 0.2); background: rgba(255, 255, 255, 0.05); }
+        .logo-img { width: 60px; height: auto; filter: drop-shadow(0 0 10px rgba(138, 43, 226, 0.6)); }
+        h1 { font-size: 2rem; font-weight: 700; margin: 0 0 5px 0; color: #d0a3ff; letter-spacing: 1px; }
+        .location-badge { background: rgba(255, 255, 255, 0.1); padding: 6px 16px; border-radius: 20px; font-size: 0.85rem; color: #ccc; margin-bottom: 40px; display: none; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .btn-start { background: linear-gradient(135deg, #8A2BE2 0%, #4B0082 100%); color: white; padding: 16px 50px; font-size: 1.1rem; font-weight: 600; border: none; border-radius: 12px; cursor: pointer; box-shadow: 0 10px 25px rgba(75, 0, 130, 0.4); transition: transform 0.2s ease, box-shadow 0.2s ease; min-width: 200px; }
+        .btn-start:hover { transform: translateY(-2px); box-shadow: 0 15px 35px rgba(75, 0, 130, 0.6); }
+        .btn-stop { background: rgba(255, 75, 75, 0.2); border: 1px solid #ff4b4b; color: #ff4b4b; padding: 14px 40px; font-size: 1rem; border-radius: 12px; cursor: pointer; display: none; margin-top: 20px; font-weight: 600; }
+        .status { color: rgba(255, 255, 255, 0.5); margin-top: 20px; font-size: 0.9rem; }
+        
+        /* Debug Stats (Tiny text at bottom) */
+        #stats { position: fixed; bottom: 10px; font-size: 10px; color: #555; }
     </style>
 </head>
 <body>
+    <div class="logo-container"><img src="https://i.postimg.cc/TKkvv3HF/Anony-Mate-Logo.png" alt="Mic" class="logo-img"></div>
 
-    <!-- Logo Section -->
-    <div class="logo-container">
-        <!-- Using a generic Mic icon or the link you provided -->
-        <img src="https://i.postimg.cc/TKkvv3HF/Anony-Mate-Logo.png" alt="Mic" class="logo-img">
-    </div>
 
     <div class="live-badge">
         <div class="live-dot"></div>
         <span id="userCount">0 Online</span>
     </div>
 
-    <h1>AnonyMate</h1>
-    
-    <!-- Partner Location (Hidden initially) -->
-    <div class="location-badge" id="locationBadge">Partner: Unknown</div>
 
-    <!-- Main Buttons -->
+    <h1>AnonyMate</h1>
+    <div class="location-badge" id="locationBadge">Partner: Unknown</div>
     <button class="btn-start" id="startBtn">Find an AnonyMate</button>
     <button class="btn-stop" id="stopBtn">End Call</button>
-
     <div class="status" id="status">Ready to connect</div>
+    <div id="stats"></div>
 
-    <!-- Hidden Audio Element -->
     <audio id="remoteAudio" autoplay playsinline></audio>
 
-    <!-- --- WEB LOGIC (DO NOT CHANGE BELOW THIS LINE EXCEPT KEYS) --- -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-
         const socket = io("https://anonymate-backend-chyg.onrender.com");
         
         
@@ -189,23 +54,29 @@
 
 
         
-        // ⬇️⬇️ PASTE YOUR METERED KEYS HERE AGAIN ⬇️⬇️
+        // ⬇️⬇️ PASTE METERED KEYS HERE ⬇️⬇️
         const turnUsername = "4c004e71f89e70a872bae606"; 
         const turnPassword = "as7cdI2hhzUQh+87";
-        // ⬆️⬆️ ------------------------------------ ⬆️⬆️
+        // ⬆️⬆️ ----------------------- ⬆️⬆️
 
+        // --- 🛑 STRICT TCP CONFIGURATION (The Fix) ---
         const config = { 
             iceServers: [
-                { urls: "stun:stun.l.google.com:19302" }, 
                 { 
+                    // 1. Force Port 443 (HTTPS-like) using TCP
                     urls: "turn:global.turn.metered.ca:443?transport=tcp",
                     username: turnUsername, credential: turnPassword
                 },
                 { 
-                    urls: "turn:global.turn.metered.ca:80?transport=udp",
+                    // 2. Backup Port 80 using TCP
+                    urls: "turn:global.turn.metered.ca:80?transport=tcp",
                     username: turnUsername, credential: turnPassword
-                }
-            ] 
+                },
+                // Removed UDP options to force stability over speed
+                { urls: "stun:stun.l.google.com:19302" }
+            ],
+            // Only use Relay if direct fails quickly
+            iceTransportPolicy: "all" 
         };
 
         const startBtn = document.getElementById('startBtn');
@@ -213,18 +84,29 @@
         const statusText = document.getElementById('status');
         const locationBadge = document.getElementById('locationBadge');
         const remoteAudio = document.getElementById('remoteAudio');
+        const statsDiv = document.getElementById('stats');
         
         let localStream, peerConnection, roomId;
         let candidateQueue = [];
 
+        // --- AUDIO WAKE-UP SYSTEM ---
+        function wakeUpAudio() {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (AudioContext) {
+                const ctx = new AudioContext();
+                ctx.resume().then(() => console.log("Audio Context Resumed"));
+            }
+        }
+
         startBtn.onclick = () => {
+            wakeUpAudio(); // Wake up speakers immediately
             startBtn.innerText = "Accessing Mic...";
             navigator.mediaDevices.getUserMedia({ audio: true, video: false })
                 .then(stream => {
                     localStream = stream;
-                    statusText.innerText = "Searching for someone...";
+                    statusText.innerText = "Searching...";
                     startBtn.style.display = 'none';
-                    stopBtn.style.display = 'block'; // Show Red Button
+                    stopBtn.style.display = 'block'; 
                     locationBadge.style.display = 'none';
                     socket.emit('join_queue');
                 })
@@ -240,20 +122,54 @@
             roomId = id;
             statusText.innerText = "Connecting...";
             locationBadge.innerText = `Partner Location: ${partnerCountry}`;
-            locationBadge.style.display = 'inline-block'; // Show badge
+            locationBadge.style.display = 'inline-block';
 
             peerConnection = new RTCPeerConnection(config);
             localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
             
             peerConnection.ontrack = (e) => {
+                console.log("Stream received!");
                 remoteAudio.srcObject = e.streams[0];
-                remoteAudio.play().catch(e => console.log("Autoplay blocked"));
-                statusText.innerText = "Connected! Speak now.";
+                
+                // Aggressive Audio Play
+                remoteAudio.play()
+                    .then(() => statusText.innerText = "Connected! Speak now.")
+                    .catch(e => {
+                        console.log("Autoplay blocked");
+                        statusText.innerText = "TAP SCREEN TO HEAR AUDIO";
+                        document.body.addEventListener('click', () => remoteAudio.play(), {once:true});
+                    });
             };
 
             peerConnection.onicecandidate = (e) => {
                 if (e.candidate) socket.emit("signal", { roomId, signalData: { type: "candidate", candidate: e.candidate } });
             };
+
+            // Monitor Connection State
+            peerConnection.onconnectionstatechange = () => {
+                const state = peerConnection.connectionState;
+                console.log("Connection State:", state);
+                if (state === 'failed') {
+                    statusText.innerText = "Connection Failed. Retrying...";
+                    // Auto-reload to try again is usually best for failed states
+                    setTimeout(() => location.reload(), 2000);
+                }
+            };
+            
+            // --- STATS MONITOR (Is data flowing?) ---
+            setInterval(() => {
+                if(peerConnection && peerConnection.connectionState === 'connected'){
+                    peerConnection.getStats(null).then(stats => {
+                        let bytesReceived = 0;
+                        stats.forEach(report => {
+                            if(report.type === 'inbound-rtp' && report.kind === 'audio'){
+                                bytesReceived = report.bytesReceived;
+                            }
+                        });
+                        statsDiv.innerText = `Data Received: ${bytesReceived} bytes`;
+                    });
+                }
+            }, 1000);
 
             if (initiator) {
                 const offer = await peerConnection.createOffer();
