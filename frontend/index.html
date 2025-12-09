@@ -111,6 +111,39 @@
             margin-top: 20px; 
             font-size: 0.9rem; 
         }
+
+        /* Live User Counter */
+        .live-badge {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(138, 43, 226, 0.3);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            backdrop-filter: blur(5px);
+        }
+
+        /* The Pulsing Green Dot */
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #00d26a;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #00d26a;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+            100% { opacity: 1; transform: scale(1); }
+        }
     </style>
 </head>
 <body>
@@ -119,6 +152,11 @@
     <div class="logo-container">
         <!-- Using a generic Mic icon or the link you provided -->
         <img src="https://i.postimg.cc/TKkvv3HF/Anony-Mate-Logo.png" alt="Mic" class="logo-img">
+    </div>
+
+    <div class="live-badge">
+        <div class="live-dot"></div>
+        <span id="userCount">0 Online</span>
     </div>
 
     <h1>AnonyMate</h1>
@@ -138,6 +176,17 @@
     <!-- --- WEB LOGIC (DO NOT CHANGE BELOW THIS LINE EXCEPT KEYS) --- -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
+
+
+        const userCountText = document.getElementById('userCount');
+
+        // Listen for the 'user_count' shout from the server
+        socket.on("user_count", (count) => {
+            userCountText.innerText = count + " Online";
+        });
+
+
+
         const socket = io("https://anonymate-backend-chyg.onrender.com"); 
         
         // ⬇️⬇️ PASTE YOUR METERED KEYS HERE AGAIN ⬇️⬇️
