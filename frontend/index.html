@@ -4,36 +4,150 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AnonyMate</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        body { background-color: #121212; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        h1 { margin-bottom: 5px; font-size: 3rem; letter-spacing: 2px; }
-        .location-badge { background: #333; padding: 5px 15px; border-radius: 15px; font-size: 0.9rem; color: #ccc; margin-bottom: 20px; display: none; }
-        .btn { padding: 15px 40px; font-size: 1.2rem; border-radius: 30px; cursor: pointer; border: none; font-weight: bold; margin-top: 20px; transition: 0.2s; }
-        .btn-start { background-color: #00d26a; color: black; }
-        .btn-stop { background-color: #ff4b4b; color: white; display: none; }
-        .status { color: #aaaaaa; margin-top: 10px; font-size: 1.1rem; text-align: center; }
+        :root {
+            --primary: #8A2BE2; /* BlueViolet */
+            --primary-gradient: linear-gradient(135deg, #8A2BE2 0%, #4B0082 100%);
+            --bg-gradient: radial-gradient(circle at center, #240046 0%, #10002b 100%);
+            --text-color: #ffffff;
+        }
+
+        body {
+            background: var(--bg-gradient);
+            color: var(--text-color);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        /* The Logo Circle */
+        .logo-container {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 2px solid rgba(138, 43, 226, 0.5); /* Subtle purple ring */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            box-shadow: 0 0 30px rgba(138, 43, 226, 0.2);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .logo-img {
+            width: 60px;
+            height: auto;
+            /* Invert color to make black icons white if needed, or use your specific PNG */
+            filter: drop-shadow(0 0 10px rgba(138, 43, 226, 0.6));
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0 0 5px 0;
+            color: #d0a3ff; /* Light purple text */
+            letter-spacing: 1px;
+        }
+
+        /* Location Badge */
+        .location-badge { 
+            background: rgba(255, 255, 255, 0.1); 
+            padding: 6px 16px; 
+            border-radius: 20px; 
+            font-size: 0.85rem; 
+            color: #ccc; 
+            margin-bottom: 40px; 
+            display: none; /* Hidden until matched */
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* The Main Button */
+        .btn-start {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 16px 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 10px 25px rgba(75, 0, 130, 0.4);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            min-width: 200px;
+        }
+
+        .btn-start:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 35px rgba(75, 0, 130, 0.6);
+        }
+
+        .btn-start:active {
+            transform: translateY(0);
+        }
+
+        /* Red "End Call" Button (Hidden initially) */
+        .btn-stop {
+            background: rgba(255, 75, 75, 0.2);
+            border: 1px solid #ff4b4b;
+            color: #ff4b4b;
+            padding: 14px 40px;
+            font-size: 1rem;
+            border-radius: 12px;
+            cursor: pointer;
+            display: none;
+            margin-top: 20px;
+            font-weight: 600;
+        }
+        .btn-stop:hover { background: rgba(255, 75, 75, 0.3); }
+
+        .status { 
+            color: rgba(255, 255, 255, 0.5); 
+            margin-top: 20px; 
+            font-size: 0.9rem; 
+        }
     </style>
 </head>
 <body>
+
+    <!-- Logo Section -->
+    <div class="logo-container">
+        <!-- Using a generic Mic icon or the link you provided -->
+        <img src="https://i.postimg.cc/TKkvv3HF/Anony-Mate-Logo.png" alt="Mic" class="logo-img">
+    </div>
+
     <h1>AnonyMate</h1>
+    
+    <!-- Partner Location (Hidden initially) -->
     <div class="location-badge" id="locationBadge">Partner: Unknown</div>
-    <div class="status" id="status">Click below to find a partner</div>
-    <button class="btn btn-start" id="startBtn">Find Partner</button>
-    <button class="btn btn-stop" id="stopBtn">End Call</button>
+
+    <!-- Main Buttons -->
+    <button class="btn-start" id="startBtn">Find an AnonyMate</button>
+    <button class="btn-stop" id="stopBtn">End Call</button>
+
+    <div class="status" id="status">Ready to connect</div>
+
+    <!-- Hidden Audio Element -->
     <audio id="remoteAudio" autoplay playsinline></audio>
 
+    <!-- --- WEB LOGIC (DO NOT CHANGE BELOW THIS LINE EXCEPT KEYS) --- -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         const socket = io("https://anonymate-backend-chyg.onrender.com"); 
         
-        // --- ⬇️ PASTE YOUR METERED KEYS HERE ⬇️ ---
+        // ⬇️⬇️ PASTE YOUR METERED KEYS HERE AGAIN ⬇️⬇️
         const turnUsername = "4c004e71f89e70a872bae606"; 
         const turnPassword = "as7cdI2hhzUQh+87";
-        // -------------------------------------------
+        // ⬆️⬆️ ------------------------------------ ⬆️⬆️
 
         const config = { 
             iceServers: [
-                { urls: "stun:stun.l.google.com:19302" }, // Always keep Google STUN
+                { urls: "stun:stun.l.google.com:19302" }, 
                 { 
                     urls: "turn:global.turn.metered.ca:443?transport=tcp",
                     username: turnUsername, credential: turnPassword
@@ -52,52 +166,44 @@
         const remoteAudio = document.getElementById('remoteAudio');
         
         let localStream, peerConnection, roomId;
-        let candidateQueue = []; // Fix for the "Timing Bug"
+        let candidateQueue = [];
 
         startBtn.onclick = () => {
-            statusText.innerText = "Requesting Microphone...";
+            startBtn.innerText = "Accessing Mic...";
             navigator.mediaDevices.getUserMedia({ audio: true, video: false })
                 .then(stream => {
                     localStream = stream;
                     statusText.innerText = "Searching for someone...";
                     startBtn.style.display = 'none';
-                    stopBtn.style.display = 'block';
+                    stopBtn.style.display = 'block'; // Show Red Button
                     locationBadge.style.display = 'none';
                     socket.emit('join_queue');
                 })
-                .catch(e => alert("Microphone access failed."));
+                .catch(e => {
+                    alert("Microphone access failed.");
+                    startBtn.innerText = "Find an AnonyMate";
+                });
         };
 
         stopBtn.onclick = () => location.reload();
 
         socket.on("match_found", async ({ roomId: id, initiator, partnerCountry }) => {
             roomId = id;
-            statusText.innerText = "Match found! Connecting...";
+            statusText.innerText = "Connecting...";
             locationBadge.innerText = `Partner Location: ${partnerCountry}`;
-            locationBadge.style.display = 'block';
+            locationBadge.style.display = 'inline-block'; // Show badge
 
             peerConnection = new RTCPeerConnection(config);
-            
-            // Add local audio
             localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
             
-            // Handle incoming audio
             peerConnection.ontrack = (e) => {
                 remoteAudio.srcObject = e.streams[0];
                 remoteAudio.play().catch(e => console.log("Autoplay blocked"));
                 statusText.innerText = "Connected! Speak now.";
             };
 
-            // Send candidates to partner
             peerConnection.onicecandidate = (e) => {
                 if (e.candidate) socket.emit("signal", { roomId, signalData: { type: "candidate", candidate: e.candidate } });
-            };
-
-            peerConnection.onconnectionstatechange = () => {
-                if (peerConnection.connectionState === 'failed') {
-                    // Don't give up immediately, sometimes it retries
-                    console.log("Connection unstable, retrying...");
-                }
             };
 
             if (initiator) {
@@ -109,20 +215,18 @@
 
         socket.on("signal", async (data) => {
             if (!peerConnection) return;
-            
             if (data.type === "offer") {
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
                 const answer = await peerConnection.createAnswer();
                 await peerConnection.setLocalDescription(answer);
                 socket.emit("signal", { roomId, signalData: { type: "answer", answer } });
-                processQueue(); // Process any waiting candidates
+                processQueue();
             } 
             else if (data.type === "answer") {
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                processQueue(); // Process any waiting candidates
+                processQueue();
             } 
             else if (data.type === "candidate") {
-                // BUG FIX: If we aren't ready, save candidate for later
                 if (peerConnection.remoteDescription) {
                     await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
                 } else {
@@ -131,11 +235,9 @@
             }
         });
 
-        // Helper to process waiting candidates
         async function processQueue() {
             while (candidateQueue.length > 0) {
-                const candidate = candidateQueue.shift();
-                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidateQueue.shift()));
             }
         }
     </script>
