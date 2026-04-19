@@ -1,1 +1,1 @@
-This is annonymate app.
+This is anonymate app.
