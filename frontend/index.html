@@ -111,7 +111,7 @@
         });
 
         client.on("user-left", () => {
-            statusText.innerText = "Partner disconnected.";
+            statusText.innerText = "Partner disconnected. Retry Again";
             leaveCall();
             setTimeout(() => location.reload(), 2000);
         });
